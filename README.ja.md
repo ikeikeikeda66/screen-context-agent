@@ -61,6 +61,8 @@ open dist/ScreenContext.app
 
 ### メニューバー
 
+![ScreenContext のメニューバー: 撮影間隔と言語のサブメニュー](docs/images/menu-bar-ja.png)
+
 記録中は **SC 撮影**、一時停止中は **SC 停止** と表示されます（英語設定では **SC Rec** / **SC Paused**）。
 
 - **撮影を一時停止 / 撮影を再開**: 動画を見るときや、見せたくない内容を表示するときに使います。状態は保存されます。

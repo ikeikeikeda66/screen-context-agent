@@ -61,6 +61,8 @@ For a one-time test with the terminal's own permission: `.venv/bin/screen-contex
 
 ### Menu bar
 
+![ScreenContext menu bar: Capture Interval and Language submenus](docs/images/menu-bar-en.png)
+
 The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 
 - **Pause Capture / Resume Capture**: use this while watching video or showing private content. The state is saved.
