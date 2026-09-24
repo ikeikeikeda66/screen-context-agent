@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screen-context-agent"
+version = "0.1.0"
+description = "Local screen history with OS-native OCR, encrypted storage and a read-only MCP server for AI assistants"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["mcp", "model-context-protocol", "ocr", "screen-capture", "ai-assistant"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+dependencies = ["mcp>=2.1,<3", "Pillow>=11", "cryptography>=44", "keyring>=25"]
+
+[project.optional-dependencies]
+macos = ["pyobjc-framework-ScreenCaptureKit>=11", "pyobjc-framework-Vision>=11", "pyobjc-framework-Cocoa>=11", "pyobjc-framework-Quartz>=11"]
+windows = ["windows-capture>=1.5", "winrt-Windows.Media.Ocr", "winrt-Windows.Graphics.Imaging", "winrt-Windows.Storage", "winrt-Windows.Storage.Streams", "winrt-Windows.Globalization", "psutil>=6"]
+encrypted = ["sqlcipher3>=0.6"]
+dev = ["pytest>=8", "httpx>=0.28", "py2app>=0.28; sys_platform == 'darwin'"]
+
+[project.urls]
+Homepage = "https://github.com/ikeikeikeda66/screen-context-agent"
+Issues = "https://github.com/ikeikeikeda66/screen-context-agent/issues"
+
+[project.scripts]
+screen-context = "screen_context.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["screen_context*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
