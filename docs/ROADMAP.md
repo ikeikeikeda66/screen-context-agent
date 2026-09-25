@@ -1,5 +1,7 @@
 # Roadmap
 
+[日本語版はこちら](ROADMAP.ja.md)
+
 This roadmap records the decisions for the next expansion of ScreenContext and the order of work. Each work item is tracked as a GitHub issue.
 
 ## Why
