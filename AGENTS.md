@@ -3,7 +3,7 @@
 ## Working on this repository
 
 - Run `.venv/bin/python -m pytest -q` after changes. Tests must not capture the screen or read real history.
-- Keep the MCP server read-only (except the proposal outbox) and free of capture imports.
+- Keep the MCP server read-only for screen data (it writes only audit rows and the proposal outbox) and free of capture imports. Never expose the audit log over MCP.
 - Put user-visible text in both catalogs of `screen_context/i18n.py`.
 - Never add real screenshots, OCR output, personal paths or names to the repository.
 

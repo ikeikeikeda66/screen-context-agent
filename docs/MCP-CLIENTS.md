@@ -13,7 +13,20 @@ Capture and indexing run separately (menu bar app or Windows control window, plu
 screen-context mcp-config --client <name> [--profile standard|full]
 ```
 
-`<name>` is one of `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`, `gemini`, `generic`. The output uses the absolute path of the current installation and sets `SCREEN_CONTEXT_HOME` and `SCREEN_CONTEXT_CLIENT` (the name written to the audit log). The target file is printed to stderr.
+`<name>` is one of `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`, `gemini`, `generic`. The output uses the absolute path of the current installation and sets `SCREEN_CONTEXT_HOME` and `SCREEN_CONTEXT_CLIENT_TOKEN`. The target file is printed to stderr. Run `screen-context init` first.
+
+### Client tokens
+
+- Each run issues a new token for the client and stores only its SHA-256. The token is named after the client; use `--name` for a second entry, for example `--client cursor --name cursor-full --profile full`.
+- Running `mcp-config` again for the same name **replaces** its token. Update the client's entry at the same time.
+- A new token starts as **pending**. On its first tool call the menu bar app (Windows: the control window) asks "Allow NAME to read your screen history?" and the call waits up to 60 seconds for your answer. Concurrent calls share one dialog. The dialog also appears while capture is paused.
+  - **Allow**: the client works from then on. **Don't Allow**: the token is refused for good; run `mcp-config` again for a new token, which asks again.
+  - If the app is not running, the call fails at once and says so. For headless setups, approve on the command line: `screen-context clients approve NAME`.
+- The token carries a profile ceiling: a `standard` token cannot start or call a `full` server.
+- The server checks the token on every tool call and names the client in the audit log from the token, not from anything the client sends.
+- `screen-context clients list` shows each client, its profile, its state (pending, active, denied, revoked), and when it last read your history. `screen-context clients revoke NAME` stops it at its next call, without restarting anything.
+- Entries created before this version have no token and the server refuses to start with them. Run `mcp-config` again and replace the entry.
+- Limit: the token sits in the client's configuration file. Tokens identify and gate clients; they do not stop malware running as your user.
 
 When you run from a source checkout, the command is `<checkout>/.venv/bin/python -m screen_context.cli`. When you run the command from the built macOS app (`ScreenContext.app/Contents/MacOS/ScreenContext mcp-config ...`), the entry points at the app.
 
@@ -44,12 +57,13 @@ Run two entries with different names if one client needs both.
 ## HTTP transport
 
 ```sh
-export SCREEN_CONTEXT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+screen-context mcp-config --client generic --name my-http-agent --profile full   # copy SCREEN_CONTEXT_CLIENT_TOKEN
 screen-context serve --profile full --transport http --port 8765
 ```
 
-- Listens on `127.0.0.1:8765/mcp` only. Every request needs `Authorization: Bearer <token>`.
-- One process serves one profile. Use a different port and token for each profile.
+- Listens on `127.0.0.1:8765/mcp` only. Every request needs `Authorization: Bearer <client token>`, checked against the database on each request, so a revoked token is refused immediately.
+- One process serves one profile. Several clients can share it, each with its own token; tokens with a lower profile ceiling are refused.
+- `SCREEN_CONTEXT_TOKEN` from earlier versions is no longer used.
 - TLS, OAuth discovery and mTLS are not implemented. Do not expose the port to other machines.
 
 ## Usage tips

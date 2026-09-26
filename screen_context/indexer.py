@@ -5,6 +5,9 @@ from PIL import Image
 from . import store
 from .crypto import atomic_write, get_key, seal, unseal
 from .privacy import denied, domains
+from .i18n import resolve, t
+from .pii import redact
+from .sensitive import detect
 
 
 def merge_lines(lines):
@@ -51,15 +54,30 @@ def drain(settings, recognize=native_ocr):
             started = time.monotonic()
             lines = recognize(image)
             record.update(ocr_text="\n".join(x["text"] for x in lines), ocr_json=json.dumps(lines, ensure_ascii=False), ocr_ms=int((time.monotonic()-started)*1000), src_w=image.width, src_h=image.height)
-            if denied(settings.policy(), record):
+            policy = settings.policy()
+            if denied(policy, record):
                 path.unlink(); stats["excluded"] += 1; continue
+            day = time.strftime("%Y-%m-%d", time.localtime(record["ts"]))
+            category = detect(record["ocr_text"] + "\n" + record.get("window_title", ""), policy["sensitive_detectors"])
+            if category:
+                # Dropped whole, before any image is written; only the reason is counted.
+                with store.connect(settings) as con: store.count_skip(con, day, category)
+                path.unlink(); stats["excluded"] += 1; continue
+            # Personal-data combinations: redact those lines, keep the rest, store no image.
+            lines, combinations = redact(lines, policy["pii_combinations"], t("pii.redacted", resolve(settings)))
+            if combinations:
+                record.update(ocr_text="\n".join(x["text"] for x in lines), ocr_json=json.dumps(lines, ensure_ascii=False), image_path=None)
+                stats["redacted"] = stats.get("redacted", 0) + 1
+            else:
+                image.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
+                buf = io.BytesIO(); image.save(buf, "WEBP", quality=60)
+                record["image_path"] = record["id"] + ".webp" + (".enc" if key else "")
+                data = seal(buf.getvalue(), key) if key else buf.getvalue()
+                atomic_write(settings.root / "images" / record["image_path"], data)
             record["domains"] = json.dumps(domains(record["ocr_text"]))
-            image.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
-            buf = io.BytesIO(); image.save(buf, "WEBP", quality=60)
-            record["image_path"] = record["id"] + ".webp" + (".enc" if key else "")
-            data = seal(buf.getvalue(), key) if key else buf.getvalue()
-            atomic_write(settings.root / "images" / record["image_path"], data)
-            with store.connect(settings) as con: store.insert(con, record)
+            with store.connect(settings) as con:
+                store.insert(con, record)
+                for combination in combinations: store.count_skip(con, day, combination)
             path.unlink()
             stats["indexed"] += 1
         except Exception as error:
@@ -77,7 +95,7 @@ def maintain(settings, now=None):
     cutoff = now - settings.retention_days*86400
     for path in (settings.root / "spool").glob("*.frame"):
         if path.stat().st_mtime < now - 86400: path.unlink(missing_ok=True)
-    service = Service(settings, "full", "maintenance")
+    service = Service(settings, "full", "maintenance", audit_path=None)
     with store.connect(settings, readonly=True) as con:
         dates = {datetime.fromtimestamp(r[0]).strftime("%Y-%m-%d") for r in con.execute("SELECT ts FROM frames")}
     rollups = {d: service.get_daily_rollup(d) for d in dates}

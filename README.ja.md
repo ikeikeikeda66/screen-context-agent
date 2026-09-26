@@ -84,7 +84,7 @@ open dist/ScreenContext.app
 .venv/bin/screen-context mcp-config --client generic         # 汎用の mcpServers JSON
 ```
 
-クライアントが stdio でサーバーを自動起動します。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
+クライアントが stdio でサーバーを自動起動します。先に `init` を実行してください。`mcp-config` は実行のたびにそのクライアント用のトークンを発行し、出力する設定に埋め込みます。同じクライアントでもう一度実行するとトークンが入れ替わり、以前の設定は使えなくなります。新しいトークンが初めて使われたとき、メニューバーアプリ（Windows では制御ウィンドウ）が、そのクライアントに画面履歴の閲覧を許可するかを確認します。アプリを起動しておくか、`screen-context clients approve NAME` で承認してください。`screen-context clients list` でクライアントの一覧と最後に履歴を読んだ時刻を、`clients revoke NAME` で次の呼び出しから接続を止められます。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
 ### プロファイルとツール
 
@@ -122,11 +122,17 @@ open dist/ScreenContext.app
 | `denied_title_patterns` | ウィンドウタイトルに適用する正規表現。 |
 | `ide_apps` | `standard` プロファイルで返さないアプリ。 |
 | `ai_output_apps`, `ai_output_title_patterns` | アシスタント自身の出力を表示している画面。提案の根拠には使えません。 |
+| `sensitive_detectors` | 初期値は `card_number`（13〜19桁、発行者の先頭番号、Luhn チェック）と `my_number`（チェックデジットが正しい12桁で、近くに「個人番号」「マイナンバー」の表記があるもの）。該当した画面は、保存前にテキストと画像をまとめて破棄し、理由の件数だけを記録します。 |
+| `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | 連絡先アプリと、決済・支払いページ（タイトル、または表示中の URL の `/checkout`・`/payment`・`/billing` のパス）を初期状態で除外します。 |
+
+| `pii_combinations` | 初期値は `name+address`、`name+phone`、`name+dob`、`name+email`。OCR の5行以内に両方の情報が現れた場合に適用します（`name+phone:3` のように行数を変えられます）。該当行は `[個人情報]` に置き換え、それ以外の部分は検索できるまま残し、プレビュー画像は保存しません。氏名はラベル（氏名、お名前、フリガナ、`Name:`）と「〇〇 様」の形でのみ判定します。`screen-context pii-check FILE` でテキストに対する判定を確認できます。 |
+
+`sensitive_*` と `pii_combinations` のルールは初期状態で有効です。無効にするにはキーを `[]` にします。不正なルールは読み飛ばさず、処理を止めます。これらはリスクベースのルールで、漏えいしたときに直接の被害が大きい入力を対象にしています。個人情報の定義ではありません（法律上は氏名だけでも個人情報に該当しえます）。ルールを追加する前に記録したデータには適用されません。
 
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
 - 90 日経過したプレビュー画像と OCR の座標情報を削除します。検索用の OCR テキストと日次集約は保持します。
-- `audit.jsonl` にはクライアント、時刻、ツール、引数の SHA-256、返却件数を記録します。検索語そのものは保存しません。
+- 監査ログは暗号化 DB 内のテーブルです。ツールの呼び出しごとに、クライアント、時刻、ツール、検索語、その他の引数、返却したフレームの ID を記録するので、どのクライアントが何を読んだかを確認できます。MCP では公開しません。`screen-context audit list` または `audit export`（平文の JSON Lines。出力したこと自体も記録されます）で確認します。`init` は旧形式の `audit.jsonl` を取り込んでから削除します。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
 ## 設定
@@ -137,8 +143,7 @@ open dist/ScreenContext.app
 | `SCREEN_CONTEXT_KEY` | 64 桁の 16 進数。OS の資格情報保管庫の代わりに使います（ヘッドレス環境）。 |
 | `SCREEN_CONTEXT_LANG` | `en` または `ja`。保存した言語設定より優先します。 |
 | `SCREEN_CONTEXT_OCR_LANGUAGES` | OCR 言語をカンマ区切りで指定（例: `en-US,ja-JP`）。macOS の既定は `ja-JP,en-US`、Windows の既定はユーザーの表示言語です（Windows OCR は先頭の 1 言語のみ使用）。 |
-| `SCREEN_CONTEXT_CLIENT` | 監査ログに記録するクライアント名。 |
-| `SCREEN_CONTEXT_TOKEN` | HTTP 接続用の Bearer トークン（32 文字以上）。 |
+| `SCREEN_CONTEXT_CLIENT_TOKEN` | `mcp-config` が設定するクライアントのトークン。有効なトークンがないとサーバーは起動しません。 |
 
 言語は `screen-context language en|ja|system` でも設定できます。
 
@@ -152,10 +157,13 @@ screen-context pause | resume       新しい撮影を停止・再開
 screen-context status | health      待ち行列と各プロセスの状態
 screen-context maintain             保持期間の処理と日次集約
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context pii-check FILE           テキストがどの機微入力ルールに該当するか
+screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE
 ```
 

@@ -47,7 +47,7 @@ def excerpt(text, limit, skip=frozenset()):
 
 def diary_markdown(settings, date, budget=6000, per_block=240, client="diary", lang=None):
     lang = lang or resolve(settings)
-    service = Service(settings, "full", client)
+    service = Service(settings, "full", client, audit_path="user")
     blocks, meta = [], None
     for page in pages(service, date):
         meta = meta or page

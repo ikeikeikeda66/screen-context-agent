@@ -77,6 +77,6 @@ def status_text(path, lang="en"):
         return t("status.none", lang)
 
 
-def mcp_config(command, settings, profile="standard", client="generic"):
+def mcp_config(command, settings, token, profile="standard"):
     from .clients import server_entry
-    return {"mcpServers": {"screen-context": server_entry(command, settings, profile, client)}}
+    return {"mcpServers": {"screen-context": server_entry(command, settings, token, profile)}}

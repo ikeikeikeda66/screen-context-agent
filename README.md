@@ -84,7 +84,7 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
-The client starts the server itself over stdio. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
+The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. The first time a new token is used, the menu bar app (or the Windows control window) asks whether that client may read your screen history; the app must be running, or approve it with `screen-context clients approve NAME`. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
 ### Profiles and tools
 
@@ -122,11 +122,17 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `denied_title_patterns` | Regular expressions matched against window titles. |
 | `ide_apps` | Hidden from the `standard` profile. |
 | `ai_output_apps`, `ai_output_title_patterns` | Frames showing an assistant's own output. Proposals cannot use them as evidence. |
+| `sensitive_detectors` | Default `card_number` (13–19 digits, issuer prefix, Luhn check) and `my_number` (12 digits with a valid check digit near a 個人番号/マイナンバー label). A frame that matches is dropped whole, text and image, before anything is stored; only the reason is counted. |
+| `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | Default exclusions for the contacts app and for checkout and payment pages (by title or by a `/checkout`, `/payment` or `/billing` path in a visible URL). |
+
+| `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. Check a text with `screen-context pii-check FILE`. |
+
+The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information). Data recorded before a rule existed is not affected by it.
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
 - After 90 days, preview images and OCR bounding boxes are deleted. Searchable OCR text and daily rollups are kept.
-- `audit.jsonl` records the client, time, tool, a SHA-256 of the arguments, and the result count. Queries themselves are not stored.
+- The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
 
 ## Configuration
@@ -137,8 +143,7 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `SCREEN_CONTEXT_KEY` | 64 hex characters. Replaces the OS credential store (headless use). |
 | `SCREEN_CONTEXT_LANG` | `en` or `ja`. Overrides the saved language. |
 | `SCREEN_CONTEXT_OCR_LANGUAGES` | Comma-separated OCR languages, for example `en-US,ja-JP`. macOS default: `ja-JP,en-US`. Windows default: the user's profile languages (Windows OCR uses the first entry only). |
-| `SCREEN_CONTEXT_CLIENT` | Client name written to the audit log. |
-| `SCREEN_CONTEXT_TOKEN` | Bearer token (32+ characters) for the HTTP transport. |
+| `SCREEN_CONTEXT_CLIENT_TOKEN` | The client's token, set by `mcp-config`. The server refuses to start without a valid one. |
 
 The language can also be set with `screen-context language en|ja|system`.
 
@@ -152,10 +157,13 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context pii-check FILE           which sensitive-input rules a text would trigger
+screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE
 ```
 

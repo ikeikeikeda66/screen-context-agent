@@ -48,7 +48,28 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
 );
 """
 
-MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2}
+# Version 3: the audit log moves from plaintext audit.jsonl into the encrypted database
+# and records query text and returned frames, so the user can see what each client read
+# (and purge it later). clients holds per-client tokens (hash only); skip_counts records
+# how many frames were not stored and why, never their content.
+SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS audit (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, path TEXT NOT NULL CHECK (path IN ('agent', 'user')),
+ client TEXT NOT NULL, profile TEXT, action TEXT NOT NULL, query TEXT, params TEXT NOT NULL DEFAULT '{}',
+ frame_ids TEXT NOT NULL DEFAULT '[]', result_count INTEGER NOT NULL DEFAULT 0, legacy_sha256 TEXT
+);
+CREATE INDEX IF NOT EXISTS audit_ts ON audit(ts);
+CREATE INDEX IF NOT EXISTS audit_client ON audit(client, ts);
+CREATE TABLE IF NOT EXISTS clients (
+ name TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE, profile TEXT NOT NULL, state TEXT NOT NULL,
+ created_at REAL NOT NULL, approved_at REAL, revoked_at REAL
+);
+CREATE TABLE IF NOT EXISTS skip_counts (
+ day TEXT NOT NULL, category TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, category)
+);
+"""
+
+MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2, 3: SCHEMA_V3}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
@@ -96,9 +117,22 @@ def migrate(con):
 def initialize(settings):
     settings.prepare()
     if not settings.plaintext: get_key(settings, create=True)
-    with connect(settings, migrating=True) as con: versions = migrate(con)
+    legacy = settings.root / "audit.jsonl"
+    with connect(settings, migrating=True) as con:
+        versions = migrate(con)
+        if legacy.exists():
+            from .audit import import_jsonl
+            import_jsonl(con, legacy)
+    # Only after the import has committed: the plaintext log must not outlive its copy, nor vanish without one.
+    legacy.unlink(missing_ok=True)
     settings.db.chmod(0o600)
     return versions
+
+
+def count_skip(con, day, category):
+    """Count a frame that was not stored, by reason only."""
+    con.execute("INSERT INTO skip_counts (day, category, count) VALUES (?, ?, 1) "
+                "ON CONFLICT(day, category) DO UPDATE SET count = count + 1", (day, category))
 
 
 def insert(con, record):

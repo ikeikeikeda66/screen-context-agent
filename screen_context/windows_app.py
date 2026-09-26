@@ -101,12 +101,23 @@ def main():
         text = tk.Text(win, width=82, height=17)
         text.pack(padx=12, pady=8)
 
-        def update(*_):
-            where.set(CLIENTS[client.get()])
+        def show(content):
             text.configure(state="normal")
             text.delete("1.0", "end")
-            text.insert("1.0", render(client.get(), cli_command(), settings))
+            text.insert("1.0", content)
             text.configure(state="disabled")
+
+        def update(*_):
+            # Only a button press issues a token: merely viewing must not replace a working client's token.
+            where.set(CLIENTS[client.get()])
+            show(t("win.mcp.hint", lang()))
+
+        def issue_entry():
+            from .access import issue
+            try: show(render(client.get(), cli_command(), settings, issue(settings, client.get())))
+            except (OSError, RuntimeError, ValueError) as error:
+                messagebox.showerror(t("win.mcp.title", lang()), t("win.mcp.failed", lang(), error=type(error).__name__))
+        ttk.Button(row, text=t("win.mcp.issue", lang()), command=issue_entry).pack(side="left", padx=6)
         client.trace_add("write", update)
         update()
 

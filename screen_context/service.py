@@ -1,13 +1,12 @@
 """Every response is filtered with the current policy, before pagination."""
 from datetime import datetime, timedelta
 import base64
-import hashlib
+import contextvars
 import hmac
 import json
 import math
-import os
 import time
-from . import store
+from . import audit, store
 from .activity import blocks
 from .privacy import denied, envelope
 from .crypto import get_key, unseal
@@ -27,6 +26,10 @@ PROFILES = ("standard", "full")
 PROFILE_ALIASES = {"claude_code": "standard", "openclaw": "full"}
 
 
+# Client identity for the current tool call, set from a verified token (see access.py and mcp_server.py).
+CURRENT_CLIENT = contextvars.ContextVar("screen_context_client", default=None)
+
+
 def profile_name(value):
     value = PROFILE_ALIASES.get(value, value)
     if value not in PROFILES: raise ValueError("Unknown profile")
@@ -39,9 +42,11 @@ def day_range(day):
 
 
 class Service:
-    def __init__(self, settings, profile="standard", client=None):
+    def __init__(self, settings, profile="standard", client=None, audit_path="agent"):
+        """`audit_path` is "agent" for MCP clients, "user" for the user's own CLI reads,
+        and None for internal work (rollups) that hands nothing to anyone."""
         profile = profile_name(profile)
-        self.settings, self.profile, self.client = settings, profile, client or profile
+        self.settings, self.profile, self.client, self.audit_path = settings, profile, client or profile, audit_path
 
     def rows(self, since=0, until=None, query=None):
         policy = self.settings.policy()
@@ -62,11 +67,14 @@ class Service:
             return [dict(r) for r in con.execute(sql, args) if not denied(policy, dict(r), self.profile)]
 
     def finish(self, records, tool, arguments):
-        # Queries may themselves contain secrets. Audit a digest and parameter names.
-        log = {"ts": time.time(), "client": self.client, "profile": self.profile, "tool": tool, "query_sha256": hashlib.sha256(json.dumps(arguments, sort_keys=True).encode()).hexdigest(), "count": len(records)}
-        path = self.settings.root / "audit.jsonl"
-        fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(json.dumps(log) + "\n")
+        # The query is stored in the encrypted database so the user can see what each client asked
+        # for and received. Auditing fails closed: no audit row, no result.
+        arguments = dict(arguments)
+        query = arguments.pop("query", None)
+        returned = [i for r in records for i in ([r["frame_id"]] if "frame_id" in r else r.get("frame_ids", []))]
+        if self.audit_path:
+            audit.record(self.settings, self.audit_path, CURRENT_CLIENT.get() or self.client, tool, profile=self.profile,
+                         query=query, params=arguments, frame_ids=returned, count=len(records))
         budget, out = 10000, []
         for rec in records:
             rec = dict(rec)

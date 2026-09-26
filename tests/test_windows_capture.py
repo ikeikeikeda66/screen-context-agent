@@ -125,3 +125,17 @@ def test_win32_identity_includes_process_birth(monkeypatch):
     assert adapter.window_identity(123) == TARGET
     with pytest.raises(RuntimeError): adapter.window_identity(0)
 
+
+
+@pytest.mark.parametrize("answer", [6, 7])
+def test_approval_dialogs_come_to_the_front_and_default_to_deny(monkeypatch, tmp_path, answer):
+    monkeypatch.setenv("SCREEN_CONTEXT_HOME", str(tmp_path))
+    calls = []
+    adapter = Backend.__new__(Backend)
+    adapter.user = SimpleNamespace(MessageBoxW=lambda owner, text, title, flags: calls.append((owner, text, flags)) or answer)
+    assert adapter.approve_client("cursor", "standard") is (answer == 6)
+    assert adapter.approve_current() is (answer == 6)
+    for owner, text, flags in calls:
+        # Yes/No, "No" as default, forced to the foreground and topmost: the worker process owns no window.
+        assert owner is None and flags & 0xF == 0x4 and flags & 0x100 and flags & 0x10000 and flags & 0x40000
+    assert "cursor" in calls[0][1] and "standard" in calls[0][1]

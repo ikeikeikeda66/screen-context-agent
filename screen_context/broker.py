@@ -1,4 +1,6 @@
-"""Per-call local approval. No capture API is imported in the MCP process."""
+"""Local approval by the user in the capture app: current-screen requests (every call) and new
+MCP clients (once per token). No capture API is imported in the MCP process."""
+import hashlib
 import json
 import time
 import uuid
@@ -34,6 +36,49 @@ def request_current(service, timeout=90):
     finally:
         path.unlink(missing_ok=True)
         reply.unlink(missing_ok=True)
+
+
+def request_client(settings, name, timeout=60, poll=.25):
+    """Ask the capture app to show the new-client dialog and wait for the recorded answer.
+    Concurrent calls from one client share one request file, so the user sees one dialog.
+    Returns the client's state: "active", "denied", or "pending" when nobody answered in time."""
+    from .access import state
+    path = settings.root / "requests" / (hashlib.sha256(name.encode()).hexdigest()[:32] + ".client")
+    deadline = time.time() + timeout
+    if not path.exists(): atomic_write(path, json.dumps({"name": name, "expires": deadline}).encode())
+    try:
+        while time.time() < deadline:
+            current = state(settings, name)
+            if current != "pending": return current
+            time.sleep(poll)
+        return state(settings, name)
+    finally:
+        # An unanswered request must not pop up later, after the client has given up.
+        if state(settings, name) == "pending": path.unlink(missing_ok=True)
+
+
+def process_client_requests(settings, adapter):
+    """Runs in the capture app, also while capture is paused: approving a client captures nothing.
+    The profile shown comes from the database, never from the request file."""
+    from .access import decide, pending_profile
+    ask = getattr(adapter, "approve_client", None)
+    for path in sorted((settings.root / "requests").glob("*.client")):
+        try:
+            request = json.loads(path.read_text())
+            name, expires = request["name"], float(request["expires"])
+            if not isinstance(name, str): raise TypeError
+        except (OSError, ValueError, KeyError, TypeError):
+            path.unlink(missing_ok=True); continue
+        if expires <= time.time():
+            path.unlink(missing_ok=True); continue
+        if ask is None: continue  # this platform cannot ask; the waiting call times out
+        try:
+            profile = pending_profile(settings, name)
+            if profile is not None: decide(settings, name, bool(ask(name, profile)), "app")
+        except Exception:
+            pass  # a failure approves nothing: the client stays pending or its call times out
+        finally:
+            path.unlink(missing_ok=True)
 
 
 def process_requests(settings, adapter):

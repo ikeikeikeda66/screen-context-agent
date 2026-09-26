@@ -1,12 +1,17 @@
 import argparse
 import json
 import signal
+import sys
 import threading
 from .config import Settings
 from .service import PROFILES, PROFILE_ALIASES
 
 
 def main():
+    # Output is JSON for scripts. Frozen Windows builds ignore PYTHONIOENCODING and would write the
+    # ANSI code page (cp932 on Japanese systems), which UTF-8 readers cannot decode (#44).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Local screen context capture, index and MCP")
     sub = parser.add_subparsers(dest="command", required=True)
     for cmd in ("init", "status", "pause", "resume", "maintain", "health"): sub.add_parser(cmd)
@@ -20,8 +25,16 @@ def main():
     from .clients import CLIENTS
     config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
+    config.add_argument("--name", help="Name for this client's token (default: the client). Running again replaces its token.")
+    clients = sub.add_parser("clients", help="List or revoke MCP client tokens")
+    clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    check = sub.add_parser("pii-check", help="Show which sensitive-input rules a text file would trigger")
+    check.add_argument("file")
+    audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
+    audit.add_argument("action", choices=["list", "export"]); audit.add_argument("--client")
+    audit.add_argument("--since", help="YYYY-MM-DD, local time"); audit.add_argument("--limit", type=int, default=100)
     for cmd in ("export", "push"):
         p = sub.add_parser(cmd); p.add_argument("date")
     args = parser.parse_args()
@@ -55,6 +68,31 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "pii-check":
+        from pathlib import Path
+        from .config import DEFAULT_POLICY
+        from .pii import scan
+        from .sensitive import detect
+        try: policy = settings.policy()
+        except FileNotFoundError: policy = DEFAULT_POLICY  # works before init, with the defaults
+        text = Path(args.file).read_text(encoding="utf-8")
+        lines = text.splitlines()
+        indexes, combinations = scan(lines, policy["pii_combinations"])
+        result = {"drop_frame": detect(text, policy["sensitive_detectors"]), "combinations": combinations,
+                  "redacted_lines": [{"line": i + 1, "text": lines[i]} for i in sorted(indexes)]}
+    elif args.command == "audit":
+        from datetime import datetime
+        from . import audit
+        try: since = datetime.strptime(args.since, "%Y-%m-%d").timestamp() if args.since else None
+        except ValueError: parser.error("--since must be YYYY-MM-DD")
+        if not 1 <= args.limit <= 100000: parser.error("--limit must be between 1 and 100000")
+        entries = audit.rows(settings, args.client, since, args.limit)
+        if args.action == "list": result = entries
+        else:
+            # Plaintext leaves the encrypted store here, so the export itself is audited.
+            audit.record(settings, "user", "cli", "audit.export", params={"client": args.client, "since": args.since, "limit": args.limit}, count=len(entries))
+            for entry in entries: print(json.dumps(entry, ensure_ascii=False))
+            return
     elif args.command == "status":
         result = {"initialized": settings.db.exists(), "paused": (settings.root / "paused").exists(), "queued": len(list((settings.root / "spool").glob("*.frame"))), "encrypted": not settings.plaintext}
     elif args.command in ("pause", "resume"):
@@ -81,11 +119,22 @@ def main():
         from .locking import lock
         with lock(settings.root / "indexer.lock"): result = maintain(settings)
     elif args.command == "mcp-config":
+        from .access import issue
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
-        import sys
-        print("Add to: " + CLIENTS[args.client], file=sys.stderr)
-        print(render(args.client, cli_command(), settings, profile_name(args.profile))); return
+        if not settings.db.exists(): parser.error("run screen-context init first")
+        profile = profile_name(args.profile)
+        token = issue(settings, args.name or args.client, profile)
+        name = args.name or args.client
+        print(f"Add to: {CLIENTS[args.client]}. This replaces any earlier token for {name}. "
+              f"On its first call, approve {name} in the ScreenContext app (or run: screen-context clients approve {name}).", file=sys.stderr)
+        print(render(args.client, cli_command(), settings, token, profile)); return
+    elif args.command == "clients":
+        from . import access
+        if args.action == "list": result = access.clients(settings)
+        elif not args.name: parser.error(args.action + " requires a client name")
+        elif args.action == "approve": access.decide(settings, args.name, True, "cli"); result = {"approved": args.name}
+        else: access.revoke(settings, args.name); result = {"revoked": args.name}
     elif args.command == "language":
         from .i18n import resolve
         if args.value: settings.root.mkdir(parents=True, exist_ok=True, mode=0o700); settings.set_language(args.value)

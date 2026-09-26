@@ -39,7 +39,11 @@ def verify_command(command):
             result = subprocess.run([*command, *args], cwd=temp, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
             assert json.loads(result.stdout)["encrypted"] is True
         assert not (Path(temp) / "history.db").read_bytes().startswith(b"SQLite format")
-        asyncio.run(verify_mcp(command, env, temp))
+        entry = subprocess.run([*command, "mcp-config", "--client", "generic"], cwd=temp, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30, check=True)
+        token = json.loads(entry.stdout)["mcpServers"]["screen-context"]["env"]["SCREEN_CONTEXT_CLIENT_TOKEN"]
+        # No capture app runs during verification, so approve the new client on the CLI.
+        subprocess.run([*command, "clients", "approve", "generic"], cwd=temp, env=env, capture_output=True, timeout=30, check=True)
+        asyncio.run(verify_mcp(command, dict(env, SCREEN_CONTEXT_CLIENT_TOKEN=token), temp))
 
 
 def main():
