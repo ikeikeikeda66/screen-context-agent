@@ -195,7 +195,7 @@ ScreenContext が防がないもの：
 
 - **macOS での配布**：アプリは公証を受けていないため、使う Mac の上でビルドする必要があります（[はじめかた](#はじめかたmacos)を参照）。
 - **パスワード欄**：macOS の Secure Input が有効な間に撮影を止める機能は、まだありません（[#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)）。パスワード管理アプリは初期状態で除外しており、パスワード欄の文字は伏せ字で表示されます。
-- **個人情報の伏せ字**は OCR に依存します。OCR が同じ行を途中で切れた形でもう一度読み取ることがあり、その断片は伏せ字から漏れることがあります（例：伏せ字にしたメールアドレスのドメイン部分だけ）（[#15](https://github.com/ikeikeikeda66/screen-context-agent/issues/15)）。
+- **個人情報の伏せ字**は OCR に依存します。OCR が同じ行を途中で切れた形でもう一度読み取ることがあり、その断片は伏せ字から漏れることがあります（例：伏せ字にしたメールアドレスのドメイン部分だけ）（[#55](https://github.com/ikeikeikeda66/screen-context-agent/issues/55)）。
 - **Windows** はベータ版です。下記を参照してください。
 
 ## 0.1 からの更新

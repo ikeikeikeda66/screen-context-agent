@@ -195,7 +195,7 @@ It does **not** protect against:
 
 - **macOS distribution**: the app is not notarized, so it must be built on the Mac that runs it (see [Quick start](#quick-start-macos)).
 - **Password fields**: capture is not yet paused while macOS Secure Input is on ([#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)). Password managers are excluded by default, and password fields show masked characters.
-- **Personal-data redaction** depends on OCR. OCR sometimes returns a second, truncated reading of the same line; such a fragment can escape redaction (for example a bare domain from a redacted e-mail address) ([#15](https://github.com/ikeikeikeda66/screen-context-agent/issues/15)).
+- **Personal-data redaction** depends on OCR. OCR sometimes returns a second, truncated reading of the same line; such a fragment can escape redaction (for example a bare domain from a redacted e-mail address) ([#55](https://github.com/ikeikeikeda66/screen-context-agent/issues/55)).
 - **Windows** is beta: see below.
 
 ## Upgrading from 0.1

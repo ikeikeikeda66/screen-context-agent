@@ -33,7 +33,7 @@ You decide which assistants may read your history, what is never recorded, and h
 
 - The macOS app is not notarized: build it on the Mac that runs it.
 - Capture does not yet pause while macOS Secure Input is on ([#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)).
-- A truncated duplicate OCR line can escape personal-data redaction ([#15](https://github.com/ikeikeikeda66/screen-context-agent/issues/15)).
+- A truncated duplicate OCR line can escape personal-data redaction ([#55](https://github.com/ikeikeikeda66/screen-context-agent/issues/55)).
 - Windows remains beta ([#25](https://github.com/ikeikeikeda66/screen-context-agent/issues/25)).
 
 ### 日本語の要約
