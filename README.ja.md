@@ -84,7 +84,7 @@ open dist/ScreenContext.app
 .venv/bin/screen-context mcp-config --client generic         # 汎用の mcpServers JSON
 ```
 
-クライアントが stdio でサーバーを自動起動します。先に `init` を実行してください。`mcp-config` は実行のたびにそのクライアント用のトークンを発行し、出力する設定に埋め込みます。同じクライアントでもう一度実行するとトークンが入れ替わり、以前の設定は使えなくなります。`screen-context clients list` でクライアントの一覧と最後に履歴を読んだ時刻を、`clients revoke NAME` で次の呼び出しから接続を止められます。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
+クライアントが stdio でサーバーを自動起動します。先に `init` を実行してください。`mcp-config` は実行のたびにそのクライアント用のトークンを発行し、出力する設定に埋め込みます。同じクライアントでもう一度実行するとトークンが入れ替わり、以前の設定は使えなくなります。新しいトークンが初めて使われたとき、メニューバーアプリ（Windows では制御ウィンドウ）が、そのクライアントに画面履歴の閲覧を許可するかを確認します。アプリを起動しておくか、`screen-context clients approve NAME` で承認してください。`screen-context clients list` でクライアントの一覧と最後に履歴を読んだ時刻を、`clients revoke NAME` で次の呼び出しから接続を止められます。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
 ### プロファイルとツール
 
@@ -152,7 +152,7 @@ screen-context status | health      待ち行列と各プロセスの状態
 screen-context maintain             保持期間の処理と日次集約
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
 screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
-screen-context clients list | revoke NAME
+screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish

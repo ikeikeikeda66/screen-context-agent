@@ -19,9 +19,12 @@ screen-context mcp-config --client <name> [--profile standard|full]
 
 - Each run issues a new token for the client and stores only its SHA-256. The token is named after the client; use `--name` for a second entry, for example `--client cursor --name cursor-full --profile full`.
 - Running `mcp-config` again for the same name **replaces** its token. Update the client's entry at the same time.
+- A new token starts as **pending**. On its first tool call the menu bar app (Windows: the control window) asks "Allow NAME to read your screen history?" and the call waits up to 60 seconds for your answer. Concurrent calls share one dialog. The dialog also appears while capture is paused.
+  - **Allow**: the client works from then on. **Don't Allow**: the token is refused for good; run `mcp-config` again for a new token, which asks again.
+  - If the app is not running, the call fails at once and says so. For headless setups, approve on the command line: `screen-context clients approve NAME`.
 - The token carries a profile ceiling: a `standard` token cannot start or call a `full` server.
 - The server checks the token on every tool call and names the client in the audit log from the token, not from anything the client sends.
-- `screen-context clients list` shows each client, its profile, whether it is active, and when it last read your history. `screen-context clients revoke NAME` stops it at its next call, without restarting anything.
+- `screen-context clients list` shows each client, its profile, its state (pending, active, denied, revoked), and when it last read your history. `screen-context clients revoke NAME` stops it at its next call, without restarting anything.
 - Entries created before this version have no token and the server refuses to start with them. Run `mcp-config` again and replace the entry.
 - Limit: the token sits in the client's configuration file. Tokens identify and gate clients; they do not stop malware running as your user.
 

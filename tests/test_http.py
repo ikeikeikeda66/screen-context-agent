@@ -10,7 +10,8 @@ def test_streamable_http_real_asgi(tmp_path):
     store.initialize(settings)
     from screen_context.mcp_server import gated_client
     token = access.issue(settings, "http-agent", "full")
-    server = create_server(settings, "full", authorize=gated_client)
+    access.decide(settings, "http-agent", True, "cli")
+    server = create_server(settings, "full", authorize=lambda: gated_client(settings))
     app = server.streamable_http_app(stateless_http=True, json_response=True)
     gate = BearerGate(app, settings, "full")
 

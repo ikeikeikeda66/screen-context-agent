@@ -38,6 +38,7 @@ def test_stdio_real_process(tmp_path):
     drain(cfg, lambda _: [{"text":"配信APIドキュメント", "bbox":[0,0,1,1]}])
     from screen_context import access
     token = access.issue(cfg, "cursor")
+    access.decide(cfg, "cursor", True, "cli")
     async def run():
         params = StdioServerParameters(command=sys.executable, args=["-m","screen_context.cli","serve"], env={**os.environ,"SCREEN_CONTEXT_HOME":str(tmp_path),"SCREEN_CONTEXT_PLAINTEXT":"1","SCREEN_CONTEXT_CLIENT_TOKEN":token})
         async with stdio_client(params) as (read, write):

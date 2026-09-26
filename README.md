@@ -84,7 +84,7 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
-The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
+The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. The first time a new token is used, the menu bar app (or the Windows control window) asks whether that client may read your screen history; the app must be running, or approve it with `screen-context clients approve NAME`. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
 ### Profiles and tools
 
@@ -152,7 +152,7 @@ screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
 screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
-screen-context clients list | revoke NAME
+screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish

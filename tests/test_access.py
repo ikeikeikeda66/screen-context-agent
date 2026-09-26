@@ -34,7 +34,8 @@ def test_profile_ceiling(settings):
 def test_revoke_list_and_audit(settings):
     add(settings, "配信API仕様")
     token = access.issue(settings, "cursor")
-    authorize = lambda: access.authenticate(settings, token, "standard")
+    access.decide(settings, "cursor", True, "cli")
+    authorize = lambda: access.authorize(settings, token, "standard")
     server = create_server(settings, "standard", authorize=authorize)
     asyncio.run(server.call_tool("search_screen_history", {"query": "配信API"}))
     listed = access.clients(settings)
@@ -44,7 +45,7 @@ def test_revoke_list_and_audit(settings):
     assert access.clients(settings)[0]["state"] == "revoked"
     with pytest.raises(ToolError, match="mcp-config"): asyncio.run(server.call_tool("search_screen_history", {"query": "配信API"}))
     with pytest.raises(ValueError): access.revoke(settings, "cursor")
-    assert [r["action"] for r in audit.rows(settings, client="cli")] == ["clients.revoke", "clients.issue"]
+    assert [r["action"] for r in audit.rows(settings, client="cli")] == ["clients.revoke", "clients.approve", "clients.issue"]
 
 
 @pytest.mark.parametrize("name", ["", "a b", "x" * 65, "../etc"])

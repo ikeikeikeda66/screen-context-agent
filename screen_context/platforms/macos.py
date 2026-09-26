@@ -49,6 +49,18 @@ class Backend:
         alert.addButtonWithTitle_(t("approve.allow", lang))
         return alert.runModal() == NSAlertFirstButtonReturn + 1
 
+    def approve_client(self, name, profile):
+        from AppKit import NSAlert, NSAlertFirstButtonReturn
+        from ..config import Settings
+        from ..i18n import resolve, t
+        lang = resolve(Settings.environment())
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(t("client.title", lang, name=name))
+        alert.setInformativeText_(t("client.body", lang, name=name, profile=profile))
+        alert.addButtonWithTitle_(t("client.deny", lang))
+        alert.addButtonWithTitle_(t("client.allow", lang))
+        return alert.runModal() == NSAlertFirstButtonReturn + 1
+
     def capture(self, front):
         if front["window_id"] is None: raise RuntimeError("No foreground window")
         content = sck.shareable_content()

@@ -43,11 +43,12 @@ def run(settings, once=False, stop=None):
     previous_hash, previous_identity, last_saved = None, None, 0
     last_probe = None
     while not stop.is_set():
+        from .broker import process_client_requests, process_requests
+        process_client_requests(settings, adapter)
         if (settings.root / "paused").exists():
             last_probe = None
             if once: return {"status": "paused"}
             stop.wait(1); continue
-        from .broker import process_requests
         process_requests(settings, adapter)
         interval = settings.capture_interval()
         if not once and last_probe is not None and time.monotonic() < last_probe + interval:

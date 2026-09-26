@@ -92,10 +92,12 @@ class BearerGate:
         await self.app(scope, receive, send)
 
 
-def gated_client():
+def gated_client(settings):
+    """HTTP: the gate identified the client; approval of a new client happens here, in the tool's
+    worker thread, so the wait never blocks the server's event loop."""
     client = CURRENT_CLIENT.get()
     if client is None: raise PermissionError(access.MISSING)  # fail closed if the gate's identity did not arrive
-    return client
+    return access.admit(settings, client)
 
 
 def run(settings, profile, transport, port=8765):
@@ -103,9 +105,9 @@ def run(settings, profile, transport, port=8765):
         token = os.environ.get(access.TOKEN_ENV)
         try: access.authenticate(settings, token, profile)
         except PermissionError as error: sys.exit(str(error))
-        create_server(settings, profile, authorize=lambda: access.authenticate(settings, token, profile)).run()
+        create_server(settings, profile, authorize=lambda: access.authorize(settings, token, profile)).run()
     else:
         import uvicorn
-        server = create_server(settings, profile, authorize=gated_client)
+        server = create_server(settings, profile, authorize=lambda: gated_client(settings))
         app = BearerGate(server.streamable_http_app(stateless_http=True), settings, profile)
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

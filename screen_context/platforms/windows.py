@@ -60,6 +60,14 @@ class Backend:
         lang = resolve(Settings.environment())
         return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", 0x104) == 6
 
+    def approve_client(self, name, profile):
+        # MB_YESNO | MB_DEFBUTTON2: denial is the default.
+        from ..config import Settings
+        from ..i18n import resolve, t
+        lang = resolve(Settings.environment())
+        text = t("client.title", lang, name=name) + "\n\n" + t("client.body", lang, name=name, profile=profile)
+        return self.user.MessageBoxW(None, text, "Screen Context", 0x104) == 6
+
     def capture(self, front):
         from windows_capture import WindowsCapture
         self.validate_target(front)

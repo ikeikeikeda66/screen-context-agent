@@ -33,6 +33,12 @@ MESSAGES = {
         "approve.body": "This allows only the current request from an MCP client. The image contains whatever is shown in the window.",
         "approve.deny": "Don't Allow",
         "approve.allow": "Allow Once",
+        "client.title": "Allow \"{name}\" to read your screen history?",
+        "client.body": ("An MCP client named \"{name}\" ({profile} profile) is connecting for the first time. "
+                        "If you allow it, it can search the text of your recorded screens until you revoke it "
+                        "with: screen-context clients revoke {name}"),
+        "client.deny": "Don't Allow",
+        "client.allow": "Allow",
         # Worker status lines
         "status.none": "No results recorded",
         "status.spooled": "Image saved",
@@ -114,6 +120,12 @@ MESSAGES = {
         "approve.body": "MCPクライアントからの今回の要求だけを許可します。画像には表示中の情報が含まれます。",
         "approve.deny": "許可しない",
         "approve.allow": "今回だけ許可",
+        "client.title": "「{name}」に画面履歴の閲覧を許可しますか？",
+        "client.body": ("MCPクライアント「{name}」（{profile}プロファイル）が初めて接続しようとしています。"
+                        "許可すると、記録された画面のテキストを検索できるようになります。"
+                        "取り消すには次を実行します：screen-context clients revoke {name}"),
+        "client.deny": "許可しない",
+        "client.allow": "許可",
         "status.none": "処理記録なし",
         "status.spooled": "画像を保存",
         "status.excluded": "除外",
