@@ -1,6 +1,7 @@
 """Every response is filtered with the current policy, before pagination."""
 from datetime import datetime, timedelta
 import base64
+import contextvars
 import hmac
 import json
 import math
@@ -23,6 +24,10 @@ def bounded(value, low, high, name):
 PROFILES = ("standard", "full")
 # Names used by earlier releases; accepted so existing client configurations keep working.
 PROFILE_ALIASES = {"claude_code": "standard", "openclaw": "full"}
+
+
+# Client identity for the current tool call, set from a verified token (see access.py and mcp_server.py).
+CURRENT_CLIENT = contextvars.ContextVar("screen_context_client", default=None)
 
 
 def profile_name(value):
@@ -65,7 +70,7 @@ class Service:
         arguments = dict(arguments)
         query = arguments.pop("query", None)
         returned = [i for r in records for i in ([r["frame_id"]] if "frame_id" in r else r.get("frame_ids", []))]
-        audit.record(self.settings, "agent", self.client, tool, profile=self.profile, query=query,
+        audit.record(self.settings, "agent", CURRENT_CLIENT.get() or self.client, tool, profile=self.profile, query=query,
                      params=arguments, frame_ids=returned, count=len(records))
         budget, out = 10000, []
         for rec in records:

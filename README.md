@@ -84,7 +84,7 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
-The client starts the server itself over stdio. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
+The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
 ### Profiles and tools
 
@@ -137,8 +137,7 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `SCREEN_CONTEXT_KEY` | 64 hex characters. Replaces the OS credential store (headless use). |
 | `SCREEN_CONTEXT_LANG` | `en` or `ja`. Overrides the saved language. |
 | `SCREEN_CONTEXT_OCR_LANGUAGES` | Comma-separated OCR languages, for example `en-US,ja-JP`. macOS default: `ja-JP,en-US`. Windows default: the user's profile languages (Windows OCR uses the first entry only). |
-| `SCREEN_CONTEXT_CLIENT` | Client name written to the audit log. |
-| `SCREEN_CONTEXT_TOKEN` | Bearer token (32+ characters) for the HTTP transport. |
+| `SCREEN_CONTEXT_CLIENT_TOKEN` | The client's token, set by `mcp-config`. The server refuses to start without a valid one. |
 
 The language can also be set with `screen-context language en|ja|system`.
 
@@ -152,7 +151,8 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context clients list | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish

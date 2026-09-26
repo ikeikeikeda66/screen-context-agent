@@ -84,7 +84,7 @@ open dist/ScreenContext.app
 .venv/bin/screen-context mcp-config --client generic         # 汎用の mcpServers JSON
 ```
 
-クライアントが stdio でサーバーを自動起動します。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
+クライアントが stdio でサーバーを自動起動します。先に `init` を実行してください。`mcp-config` は実行のたびにそのクライアント用のトークンを発行し、出力する設定に埋め込みます。同じクライアントでもう一度実行するとトークンが入れ替わり、以前の設定は使えなくなります。`screen-context clients list` でクライアントの一覧と最後に履歴を読んだ時刻を、`clients revoke NAME` で次の呼び出しから接続を止められます。クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
 ### プロファイルとツール
 
@@ -137,8 +137,7 @@ open dist/ScreenContext.app
 | `SCREEN_CONTEXT_KEY` | 64 桁の 16 進数。OS の資格情報保管庫の代わりに使います（ヘッドレス環境）。 |
 | `SCREEN_CONTEXT_LANG` | `en` または `ja`。保存した言語設定より優先します。 |
 | `SCREEN_CONTEXT_OCR_LANGUAGES` | OCR 言語をカンマ区切りで指定（例: `en-US,ja-JP`）。macOS の既定は `ja-JP,en-US`、Windows の既定はユーザーの表示言語です（Windows OCR は先頭の 1 言語のみ使用）。 |
-| `SCREEN_CONTEXT_CLIENT` | 監査ログに記録するクライアント名。 |
-| `SCREEN_CONTEXT_TOKEN` | HTTP 接続用の Bearer トークン（32 文字以上）。 |
+| `SCREEN_CONTEXT_CLIENT_TOKEN` | `mcp-config` が設定するクライアントのトークン。有効なトークンがないとサーバーは起動しません。 |
 
 言語は `screen-context language en|ja|system` でも設定できます。
 
@@ -152,7 +151,8 @@ screen-context pause | resume       新しい撮影を停止・再開
 screen-context status | health      待ち行列と各プロセスの状態
 screen-context maintain             保持期間の処理と日次集約
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context clients list | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish

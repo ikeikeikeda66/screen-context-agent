@@ -20,7 +20,7 @@
 |---|---|---|
 | Capture | `capture.py`, `platforms/macos.py`, `platforms/sck.py`, `platforms/windows.py` | One foreground window at native resolution (ScreenCaptureKit on macOS, Windows Graphics Capture by exact HWND on Windows). Checks that the window did not change during capture. |
 | Indexer | `indexer.py`, `platforms/vision.py` | Apple Vision OCR (full frame plus 3×3 tiles at 2× for wide layouts) or Windows.Media.Ocr. Excluded frames are deleted before any image is written. |
-| MCP server | `mcp_server.py`, `service.py` | Fixed profile per process. No capture module is imported. HTTP requires a bearer token. |
+| MCP server | `mcp_server.py`, `service.py`, `access.py` | Fixed profile per process. No capture module is imported. Every tool call needs a per-client token (environment variable for stdio, bearer token for HTTP) whose profile ceiling covers the server; the audit log names the client from the token. |
 | Approval broker | `broker.py` | `get_current_screen` writes a request file; the capture process shows an OS dialog and captures only after "Allow Once". |
 
 The capture and indexer processes coordinate with lock files (`capture.lock`, `indexer.lock`) and status files (`capture-status.json`, `index-status.json`). `health.py` combines them with the session state to tell `paused`, `capture_stopped`, `permission_error`, `locked`, `indexer_stopped`, `indexing_delayed`, `idle` and `active` apart.

@@ -15,6 +15,6 @@ In scope, for example:
 - Reading history without the encryption key, or bypassing exclusions (`policy.json`) on any read path
 - Raising the profile of an MCP server process, or reaching `full` tools from `standard`
 - Capturing without the per-call approval in `get_current_screen`
-- Bypassing bearer authentication on the HTTP transport
+- Bypassing client-token authentication (stdio or HTTP), the profile ceiling, or revocation
 
 Out of scope: prompt injection through screen text itself. Results are labeled untrusted, but that label cannot neutralize instructions shown on screen; clients must treat screen text as data.

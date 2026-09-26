@@ -52,7 +52,7 @@ def test_client_snippets_are_valid(tmp_path):
     settings = Settings(tmp_path / "data dir")
     command = [r"C:\Program Files\ScreenContext\screen-context.exe"]
     for client in CLIENTS:
-        text = render(client, command, settings)
+        text = render(client, command, settings, "sc_example")
         if client == "claude-code":
             parts = shlex.split(text)
             assert parts[:4] == ["claude", "mcp", "add", "--scope"] and parts[-4:] == [command[0], "serve", "--profile", "standard"]
@@ -63,14 +63,16 @@ def test_client_snippets_are_valid(tmp_path):
             assert json.loads(text)["servers"]["screen-context"]["type"] == "stdio"
         else:
             assert json.loads(text)["mcpServers"]["screen-context"]["args"] == ["serve", "--profile", "standard"]
-    with pytest.raises(ValueError): render("unknown", command, settings)
+    with pytest.raises(ValueError): render("unknown", command, settings, "sc_example")
 
 
 def test_cli_mcp_config_and_language(tmp_path):
     env = {"SCREEN_CONTEXT_HOME": str(tmp_path), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin"}
     run = lambda *args: subprocess.run([sys.executable, "-m", "screen_context.cli", *args], env=env, capture_output=True, text=True, check=True).stdout
+    run("init")
     entry = json.loads(run("mcp-config", "--client", "cursor", "--profile", "openclaw"))["mcpServers"]["screen-context"]
-    assert entry["args"][-2:] == ["--profile", "full"] and entry["env"]["SCREEN_CONTEXT_CLIENT"] == "cursor"
+    assert entry["args"][-2:] == ["--profile", "full"] and entry["env"]["SCREEN_CONTEXT_CLIENT_TOKEN"].startswith("sc_")
+    assert "SCREEN_CONTEXT_CLIENT" not in entry["env"]
     assert json.loads(run("language", "ja")) == {"language": "ja", "effective": "ja"}
     assert json.loads(run("language"))["language"] == "ja"
 

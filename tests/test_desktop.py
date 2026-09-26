@@ -48,11 +48,11 @@ def test_partial_spawn_failure_requests_graceful_stop(tmp_path):
 
 
 def test_mcp_config_preserves_spaces_and_no_shell(tmp_path):
-    data = mcp_config([r"C:\Program Files\ScreenContext\screen-context.exe"], Settings(tmp_path))
+    data = mcp_config([r"C:\Program Files\ScreenContext\screen-context.exe"], Settings(tmp_path), "sc_example")
     server = json.loads(json.dumps(data))["mcpServers"]["screen-context"]
     assert server["command"] == r"C:\Program Files\ScreenContext\screen-context.exe"
     assert server["args"] == ["serve", "--profile", "standard"]
-    assert "KEY" not in json.dumps(server)
+    assert "KEY" not in json.dumps(server) and server["env"]["SCREEN_CONTEXT_CLIENT_TOKEN"] == "sc_example"
 
 
 def test_status_does_not_expose_error_payload(tmp_path):

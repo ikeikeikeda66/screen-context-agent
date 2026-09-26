@@ -20,6 +20,9 @@ def main():
     from .clients import CLIENTS
     config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
+    config.add_argument("--name", help="Name for this client's token (default: the client). Running again replaces its token.")
+    clients = sub.add_parser("clients", help="List or revoke MCP client tokens")
+    clients.add_argument("action", choices=["list", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
@@ -97,11 +100,21 @@ def main():
         from .locking import lock
         with lock(settings.root / "indexer.lock"): result = maintain(settings)
     elif args.command == "mcp-config":
+        from .access import issue
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
         import sys
-        print("Add to: " + CLIENTS[args.client], file=sys.stderr)
-        print(render(args.client, cli_command(), settings, profile_name(args.profile))); return
+        if not settings.db.exists(): parser.error("run screen-context init first")
+        profile = profile_name(args.profile)
+        token = issue(settings, args.name or args.client, profile)
+        print("Add to: " + CLIENTS[args.client] + ". This replaces any earlier token for " + (args.name or args.client) + ".", file=sys.stderr)
+        print(render(args.client, cli_command(), settings, token, profile)); return
+    elif args.command == "clients":
+        from . import access
+        if args.action == "list": result = access.clients(settings)
+        else:
+            if not args.name: parser.error("revoke requires a client name")
+            access.revoke(settings, args.name); result = {"revoked": args.name}
     elif args.command == "language":
         from .i18n import resolve
         if args.value: settings.root.mkdir(parents=True, exist_ok=True, mode=0o700); settings.set_language(args.value)

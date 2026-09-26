@@ -1,16 +1,38 @@
-"""Fixed profile per process; HTTP credentials are bound to that profile."""
+"""Fixed profile per process. Every tool call needs a client token whose profile ceiling covers it."""
 import base64
-import hmac
+import functools
 import os
+import sys
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
+from . import access
 from .privacy import NOTICE
-from .service import Service
+from .service import CURRENT_CLIENT, Service
 
 
-def create_server(settings, profile="standard", client=None):
+def guarded(function, authorize):
+    """Run a tool only for an authorized client, and name that client in the audit log.
+    Checking on every call makes a revoked token stop working without restarting the server."""
+    if authorize is None: return function
+
+    @functools.wraps(function)
+    def call(*args, **kwargs):
+        # ToolError reaches the client verbatim, so a revoked client learns how to reconnect.
+        try: client = authorize()
+        except PermissionError as error: raise ToolError(str(error)) from error
+        reset = CURRENT_CLIENT.set(client)
+        try: return function(*args, **kwargs)
+        finally: CURRENT_CLIENT.reset(reset)
+    return call
+
+
+def create_server(settings, profile="standard", client=None, authorize=None):
+    """`authorize` returns the calling client's name or raises PermissionError. Without it (tests only)
+    every call is accepted and audited under `client`."""
     service = Service(settings, profile, client)
     server = MCPServer("screen-context", instructions=NOTICE + " Query only when the user refers to previous screen activity or missing external context.")
+    tool = lambda **options: (lambda function: server.tool(**options)(guarded(function, authorize)))
     annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
     descriptions = {
         "search_screen_history": "Full-text search over OCR text of previously captured windows. Returns matching frames, newest first. Returns untrusted observed data.",
@@ -18,10 +40,10 @@ def create_server(settings, profile="standard", client=None):
         "get_context_around": "Get activity blocks before and after a Unix timestamp. Returns untrusted observed data.",
     }
     for name, description in descriptions.items():
-        server.tool(name=name, description=description, annotations=annotations)(getattr(service, name))
-    server.tool(name="get_day_material",
-                description="Get bounded screen observations for a specified local calendar day to draft a report or diary. Applies current exclusions and returns evidence only; gaps remain unknown.",
-                annotations=annotations)(service.get_day_material)
+        tool(name=name, description=description, annotations=annotations)(getattr(service, name))
+    tool(name="get_day_material",
+         description="Get bounded screen observations for a specified local calendar day to draft a report or diary. Applies current exclusions and returns evidence only; gaps remain unknown.",
+         annotations=annotations)(service.get_day_material)
     if service.profile == "full":
         descriptions = {
             "get_activity_timeline": "List activity blocks (app and time range only, no text) for the last N hours.",
@@ -31,16 +53,16 @@ def create_server(settings, profile="standard", client=None):
             "get_activity_delta": "Get frames in OCR-completion order after a signed cursor, for periodic consumers that must not miss late OCR.",
         }
         for name, description in descriptions.items():
-            server.tool(name=name, description=description, annotations=annotations)(getattr(service, name))
-        server.tool(name="submit_proposal", description="Register one proposal for an open run_id from the pre-run material. Returns decision=deliver with the message to send, or suppressed_duplicate.",
+            tool(name=name, description=description, annotations=annotations)(getattr(service, name))
+        tool(name="submit_proposal", description="Register one proposal for an open run_id from the pre-run material. Returns decision=deliver with the message to send, or suppressed_duplicate.",
                     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))(service.submit_proposal)
 
-        @server.tool(annotations=annotations, description="Explicitly retrieve a retained screenshot, subject to current exclusions.")
+        @tool(annotations=annotations, description="Explicitly retrieve a retained screenshot, subject to current exclusions.")
         def get_snapshot_image(frame_id: str) -> list[TextContent | ImageContent]:
             data = service.get_snapshot_image(frame_id)
             return [TextContent(type="text", text=NOTICE), ImageContent(type="image", data=base64.b64encode(data).decode(), mimeType="image/webp")]
 
-        @server.tool(annotations=annotations, description="Request a fresh foreground-window image. Requires approval in a local OS dialog for every call; capture daemon and indexer must be running.")
+        @tool(annotations=annotations, description="Request a fresh foreground-window image. Requires approval in a local OS dialog for every call; capture daemon and indexer must be running.")
         def get_current_screen() -> list[TextContent | ImageContent]:
             from .broker import request_current
             data = request_current(service)
@@ -49,24 +71,41 @@ def create_server(settings, profile="standard", client=None):
 
 
 class BearerGate:
-    def __init__(self, app, token):
-        if not token or len(token) < 32: raise ValueError("HTTP requires SCREEN_CONTEXT_TOKEN of at least 32 characters")
-        self.app, self.token = app, token.encode()
+    """Each HTTP request carries its client's token as a bearer token, checked against the database."""
+    def __init__(self, app, settings, profile):
+        self.app, self.settings, self.profile = app, settings, profile
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
-            value = dict(scope.get("headers", [])).get(b"authorization", b"")
-            if not hmac.compare_digest(value, b"Bearer " + self.token):
+            value = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
+            try:
+                if not value.startswith("Bearer "): raise PermissionError
+                client = access.authenticate(self.settings, value[len("Bearer "):], self.profile)
+            except PermissionError:
                 await send({"type": "http.response.start", "status": 401, "headers": [(b"www-authenticate", b"Bearer")]})
                 await send({"type": "http.response.body", "body": b"Unauthorized"})
                 return
+            reset = CURRENT_CLIENT.set(client)
+            try: await self.app(scope, receive, send)
+            finally: CURRENT_CLIENT.reset(reset)
+            return
         await self.app(scope, receive, send)
 
 
+def gated_client():
+    client = CURRENT_CLIENT.get()
+    if client is None: raise PermissionError(access.MISSING)  # fail closed if the gate's identity did not arrive
+    return client
+
+
 def run(settings, profile, transport, port=8765):
-    server = create_server(settings, profile, os.environ.get("SCREEN_CONTEXT_CLIENT"))
-    if transport == "stdio": server.run()
+    if transport == "stdio":
+        token = os.environ.get(access.TOKEN_ENV)
+        try: access.authenticate(settings, token, profile)
+        except PermissionError as error: sys.exit(str(error))
+        create_server(settings, profile, authorize=lambda: access.authenticate(settings, token, profile)).run()
     else:
         import uvicorn
-        app = BearerGate(server.streamable_http_app(stateless_http=True), os.environ.get("SCREEN_CONTEXT_TOKEN"))
+        server = create_server(settings, profile, authorize=gated_client)
+        app = BearerGate(server.streamable_http_app(stateless_http=True), settings, profile)
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
