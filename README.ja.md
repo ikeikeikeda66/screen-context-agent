@@ -127,12 +127,15 @@ open dist/ScreenContext.app
 
 | `pii_combinations` | 初期値は `name+address`、`name+phone`、`name+dob`、`name+email`。OCR の5行以内に両方の情報が現れた場合に適用します（`name+phone:3` のように行数を変えられます）。該当行は `[個人情報]` に置き換え、それ以外の部分は検索できるまま残し、プレビュー画像は保存しません。氏名はラベル（氏名、お名前、フリガナ、`Name:`）と「〇〇 様」の形でのみ判定します。`screen-context pii-check FILE` でテキストに対する判定を確認できます。 |
 
-`sensitive_*` と `pii_combinations` のルールは初期状態で有効です。無効にするにはキーを `[]` にします。不正なルールは読み飛ばさず、処理を止めます。これらはリスクベースのルールで、漏えいしたときに直接の被害が大きい入力を対象にしています。個人情報の定義ではありません（法律上は氏名だけでも個人情報に該当しえます）。ルールを追加する前に記録したデータには適用されません。
+`sensitive_*` と `pii_combinations` のルールは初期状態で有効です。無効にするにはキーを `[]` にします。不正なルールは読み飛ばさず、処理を止めます。これらはリスクベースのルールで、漏えいしたときに直接の被害が大きい入力を対象にしています。個人情報の定義ではありません（法律上は氏名だけでも個人情報に該当しえます）。ルールは新しく記録する画面に適用されます。それより前の記録に適用するには、`screen-context pii-scan`（件数の確認のみ）を実行し、続けて `pii-scan --apply` を実行します。該当する画面は、現在の indexer と同じ方法で破棄または伏せ字にします。伏せ字にした画面のプレビューは削除し、日次集約と提案の根拠も更新します。取り消しはできません。
 
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
-- 90 日経過したプレビュー画像と OCR の座標情報を削除します。検索用の OCR テキストと日次集約は保持します。
+- 保持期間：プレビュー画像と OCR の座標情報は 90 日で削除します。検索用の OCR テキスト、日次集約、監査ログは、期限を設定しない限り保持します。`screen-context retention --preview 30 --text 365 --audit 365` で日数を設定し（`none` は無期限）、1時間ごとのメンテナンスで適用します。期限切れのテキストは `purge` と同じ連鎖削除で消します。`screen-context usage` で、プレビュー、データベース、スプール、出力ファイルが使っている容量を確認できます。
+- `screen-context purge` は記録を完全に削除します。対象は、期間（`--from`/`--to` または `--last 15m`）、`--app`、`--keyword`、`--block`（1つの活動ブロック）、`--excluded`（現在のポリシーで既に隠れているもの）で指定し、組み合わせることもできます。`--yes` を付けない場合は削除対象を表示するだけです。その際、どのクライアントに渡したか、どの出力に含めたかもあわせて表示します。`--yes` を付けると、プレビュー画像、期間内の未処理のスプール、日次集約の中の写し、そのフレームを引用した提案の根拠、それを返した監査記録の検索語とフレーム ID もまとめて削除します。解放された DB のページは上書きします。取り消しはできません。すでに PC の外に出たデータは取り戻せません。
 - 監査ログは暗号化 DB 内のテーブルです。ツールの呼び出しごとに、クライアント、時刻、ツール、検索語、その他の引数、返却したフレームの ID を記録するので、どのクライアントが何を読んだかを確認できます。MCP では公開しません。`screen-context audit list` または `audit export`（平文の JSON Lines。出力したこと自体も記録されます）で確認します。`init` は旧形式の `audit.jsonl` を取り込んでから削除します。
+- `screen-context backup FILE` は1つのアーカイブを作ります。中身は DB の一貫したスナップショット、プレビュー画像、設定で、いずれも暗号化されたままです。データの鍵は、パスフレーズから導出した鍵（scrypt、AES-GCM）で包んで同梱します。`screen-context restore FILE` は、何かを書き込む前にパスフレーズを確認します。既存の履歴は `--replace` を付けない限り上書きせず、鍵は資格情報ストアに登録します。別の PC への移行に使えます。パスフレーズを失うとアーカイブは開けません。
+- `screen-context wipe`（`ERASE` と入力）は、まず資格情報ストアから鍵を削除して暗号化されたファイルをすべて読めなくし、そのあとデータフォルダを削除します。実行前にキャプチャと indexer を終了してください。バックアップはパスフレーズがあれば引き続き復元できます。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
 ## 設定
@@ -162,7 +165,13 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context backup FILE | restore FILE [--replace]   パスフレーズで保護したアーカイブ
+screen-context wipe                     鍵を削除してから全データを削除（取り消し不可）
+screen-context usage                    データ種別ごとの使用容量
+screen-context retention [--preview D] [--text D] [--audit D]   保持日数（none で無期限）
+screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context pii-check FILE           テキストがどの機微入力ルールに該当するか
+screen-context pii-scan [--apply]       過去の記録にルールを適用する
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE
 ```

@@ -127,12 +127,15 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 
 | `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. Check a text with `screen-context pii-check FILE`. |
 
-The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information). Data recorded before a rule existed is not affected by it.
+The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information). Rules apply to new frames. To apply them to frames recorded earlier, run `screen-context pii-scan` (counts only), then `pii-scan --apply`: matching frames are dropped or redacted exactly as the indexer would today, previews of redacted frames are deleted, and rollups and proposal evidence follow. No undo.
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
-- After 90 days, preview images and OCR bounding boxes are deleted. Searchable OCR text and daily rollups are kept.
+- Retention: preview images and OCR bounding boxes are deleted after 90 days; searchable OCR text, daily rollups and the audit log are kept until you set a limit. `screen-context retention --preview 30 --text 365 --audit 365` sets the days (`none` keeps forever), and the hourly maintenance applies them. Expired text is deleted with the same cascade as `purge`. `screen-context usage` shows the space used by previews, the database, the spool and exports.
+- `screen-context purge` deletes frames for good: by time (`--from`/`--to`, or `--last 15m`), `--app`, `--keyword`, one `--block`, or `--excluded` (everything the current policy already hides). Selectors combine. Without `--yes` it only reports what would go, including which clients already received those frames and which of your exports included them. With `--yes` it also deletes the previews, unindexed spool files in the time range, the rollups' copies, proposal evidence that quoted the frames, and the query text and frame IDs in audit rows that returned them. Freed database pages are overwritten. There is no undo. Frames that already left the machine cannot be recalled.
 - The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
+- `screen-context backup FILE` writes one archive: a consistent database snapshot, previews and settings, all still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `screen-context restore FILE` asks for the passphrase before writing anything, refuses to overwrite an existing history without `--replace`, and puts the key into the credential store. Use it to move to another machine. Keep the passphrase: without it the archive cannot be opened.
+- `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
 
 ## Configuration
@@ -162,7 +165,13 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
+screen-context wipe                     delete the key, then all data (no undo)
+screen-context usage                    disk space by kind of data
+screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
+screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context pii-check FILE           which sensitive-input rules a text would trigger
+screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE
 ```

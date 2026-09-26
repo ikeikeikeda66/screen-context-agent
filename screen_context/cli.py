@@ -30,6 +30,23 @@ def main():
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    wipe = sub.add_parser("wipe", help="Delete the key, then the whole data folder (no undo)")
+    wipe.add_argument("--confirm", help="type ERASE to skip the prompt")
+    for cmd in ("backup", "restore"):
+        p = sub.add_parser(cmd, help="Encrypted archive protected by a passphrase" if cmd == "backup" else "Restore an archive made by backup")
+        p.add_argument("file"); p.add_argument("--passphrase-file", help="read the passphrase from this file (for scripts)")
+        if cmd == "restore": p.add_argument("--replace", action="store_true", help="overwrite the existing history")
+    sub.add_parser("usage", help="Disk space by kind of data, and the retention periods")
+    keep = sub.add_parser("retention", help="Show or set how long data is kept (days, or none for forever)")
+    for flag in ("preview", "text", "audit"): keep.add_argument("--" + flag, metavar="DAYS|none")
+    purge = sub.add_parser("purge", help="Delete frames and everything derived from them (no undo)")
+    purge.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    purge.add_argument("--to", dest="until", help="local time, exclusive"); purge.add_argument("--last", help="for example 15m, 2h, 1d")
+    purge.add_argument("--app", help="bundle ID or process name"); purge.add_argument("--keyword"); purge.add_argument("--block", help="activity block ID")
+    purge.add_argument("--excluded", action="store_true", help="frames the current policy excludes (hidden until now)")
+    purge.add_argument("--yes", action="store_true", help="delete; without it, only show what would be deleted")
+    rescan = sub.add_parser("pii-scan", help="Apply the sensitive-input rules to frames stored before they existed")
+    rescan.add_argument("--apply", action="store_true", help="drop and redact; without it, only count")
     check = sub.add_parser("pii-check", help="Show which sensitive-input rules a text file would trigger")
     check.add_argument("file")
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
@@ -68,6 +85,61 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "wipe":
+        from . import lifecycle
+        answer = args.confirm or input(f"This deletes the encryption key and everything in {settings.root}. Type ERASE to continue: ")
+        if answer != "ERASE": parser.error("not confirmed; nothing was deleted")
+        try: result = lifecycle.wipe(settings)
+        except (RuntimeError, FileNotFoundError) as error: parser.error(str(error))
+    elif args.command in ("backup", "restore"):
+        from pathlib import Path
+        from getpass import getpass
+        from . import lifecycle
+        if args.passphrase_file: passphrase = Path(args.passphrase_file).read_text(encoding="utf-8").rstrip("\r\n")
+        else:
+            passphrase = getpass("Backup passphrase: ")
+            if args.command == "backup" and getpass("Repeat the passphrase: ") != passphrase: parser.error("passphrases differ")
+        try:
+            result = lifecycle.backup(settings, args.file, passphrase) if args.command == "backup" else \
+                lifecycle.restore(settings, args.file, passphrase, args.replace)
+        except (ValueError, PermissionError, FileExistsError, RuntimeError) as error: parser.error(str(error))
+    elif args.command == "usage":
+        from .storage import usage
+        result = usage(settings)
+    elif args.command == "retention":
+        for flag in ("preview", "text", "audit"):
+            value = getattr(args, flag)
+            if value is None: continue
+            try: settings.set_retention(flag + "_retention_days", None if value == "none" else int(value))
+            except (ValueError, PermissionError) as error: parser.error(str(error))
+        result = {name: settings.retention(name) for name in ("preview_retention_days", "text_retention_days", "audit_retention_days")}
+    elif args.command == "purge":
+        import time
+        from datetime import datetime
+        from . import purge
+        try:
+            since = datetime.fromisoformat(args.since).timestamp() if args.since else None
+            until = datetime.fromisoformat(args.until).timestamp() if args.until else None
+            if args.last: since = max(since or 0, time.time() - purge.duration(args.last))
+            selector = {"since": since, "until": until, "app": args.app, "keyword": args.keyword, "block": args.block, "excluded": args.excluded}
+            ids = purge.select(settings, **selector)
+        except ValueError as error: parser.error(str(error))
+        # Frames not yet OCRed match only on time and app; content selectors cannot see them.
+        content = args.keyword or args.block or args.excluded
+        spool_files = [] if content or (since is None and until is None) else purge.spooled(settings, since, until, args.app)
+        if not args.yes:
+            result = {**purge.plan(settings, ids, spool_files), "deleted": False,
+                      "next": "Run again with --yes to delete. This cannot be undone."}
+        elif not ids and not spool_files: result = {"frames": 0, "deleted": False}
+        else: result = {**purge.execute(settings, ids, selector, spool_files), "deleted": True}
+    elif args.command == "pii-scan":
+        from . import rescan
+        drops, redactions = rescan.scan(settings)
+        if not args.apply:
+            result = {**rescan.report(settings, drops, redactions), "applied": False,
+                      "next": "Run again with --apply to drop and redact. This cannot be undone."}
+        elif not drops and not redactions: result = {"frames": {"drop": 0, "redact": 0}, "applied": False}
+        else: result = {**rescan.apply(settings, drops, redactions), "applied": True}
     elif args.command == "pii-check":
         from pathlib import Path
         from .config import DEFAULT_POLICY

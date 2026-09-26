@@ -98,8 +98,10 @@ def process_requests(settings, adapter):
             req = json.loads(path.read_text())
             if req["expires"] <= time.time():
                 path.unlink(missing_ok=True); continue
+            from .capture import locked
             target = adapter.foreground()
-            allowed = not denied(settings.policy(), target) and adapter.approve_current()
+            # Nobody can approve on a locked screen, and capturing then can crash the capture library (#47).
+            allowed = not locked(adapter) and not denied(settings.policy(), target) and adapter.approve_current()
             result = {"status": "denied"}
             # Capture the exact window selected before the dialog, never the dialog itself.
             if allowed and path.exists() and time.time() < req["expires"] and not (settings.root / "paused").exists():

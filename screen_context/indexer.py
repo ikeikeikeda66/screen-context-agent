@@ -91,8 +91,15 @@ def drain(settings, recognize=native_ocr):
 def maintain(settings, now=None):
     from .service import Service
     from datetime import datetime
+    from . import purge
     now = now or time.time()
-    cutoff = now - settings.retention_days*86400
+    cutoff = now - settings.retention("preview_retention_days")*86400
+    text_days, audit_days = settings.retention("text_retention_days"), settings.retention("audit_retention_days")
+    expired_text = []
+    if text_days:
+        # Text retention deletes whole frames, through the same cascade as a manual purge.
+        expired_text = purge.select(settings, until=now - text_days*86400)
+        if expired_text: purge.execute(settings, expired_text, {"retention": "text", "days": text_days}, actor="maintain", action="retention")
     for path in (settings.root / "spool").glob("*.frame"):
         if path.stat().st_mtime < now - 86400: path.unlink(missing_ok=True)
     service = Service(settings, "full", "maintenance", audit_path=None)
@@ -108,4 +115,8 @@ def maintain(settings, now=None):
             if path.parent == (settings.root / "images").resolve(): path.unlink(missing_ok=True)
         # §8: retain searchable OCR; delete raw detail + preview after 90 days.
         con.execute("UPDATE frames SET image_path=NULL, ocr_json=NULL WHERE ts < ?", (cutoff,))
-    return {"expired_images": len(old), "rollups": len(rollups)}
+        expired_audit = 0
+        if audit_days:
+            con.execute("PRAGMA secure_delete=ON")
+            expired_audit = con.execute("DELETE FROM audit WHERE ts < ?", (now - audit_days*86400,)).rowcount
+    return {"expired_images": len(old), "rollups": len(rollups), "expired_frames": len(expired_text), "expired_audit_rows": expired_audit}

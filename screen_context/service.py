@@ -296,7 +296,7 @@ class Service:
         policy = self.settings.policy()
         with store.connect(self.settings, readonly=True) as con:
             row = con.execute("SELECT * FROM frames WHERE id=?", (frame_id,)).fetchone()
-        if row is None or denied(policy, dict(row), self.profile) or not row["image_path"] or row["ts"] < time.time() - self.settings.retention_days*86400:
+        if row is None or denied(policy, dict(row), self.profile) or not row["image_path"] or row["ts"] < time.time() - self.settings.retention("preview_retention_days")*86400:
             self.finish([], "get_snapshot_image", {"frame_id": frame_id})
             raise ValueError("Snapshot unavailable")
         path = (self.settings.root / "images" / row["image_path"]).resolve()
