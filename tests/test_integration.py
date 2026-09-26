@@ -36,8 +36,11 @@ def test_stdio_real_process(tmp_path):
     cfg = Settings(tmp_path, plaintext=True); store.initialize(cfg)
     spool(cfg, Image.new("RGB", (100,100)), dict(app_bundle="Chrome",app_name="Chrome",window_title="Docs",display_id="1"))
     drain(cfg, lambda _: [{"text":"配信APIドキュメント", "bbox":[0,0,1,1]}])
+    from screen_context import access
+    token = access.issue(cfg, "cursor")
+    access.decide(cfg, "cursor", True, "cli")
     async def run():
-        params = StdioServerParameters(command=sys.executable, args=["-m","screen_context.cli","serve"], env={**os.environ,"SCREEN_CONTEXT_HOME":str(tmp_path),"SCREEN_CONTEXT_PLAINTEXT":"1"})
+        params = StdioServerParameters(command=sys.executable, args=["-m","screen_context.cli","serve"], env={**os.environ,"SCREEN_CONTEXT_HOME":str(tmp_path),"SCREEN_CONTEXT_PLAINTEXT":"1","SCREEN_CONTEXT_CLIENT_TOKEN":token})
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -53,6 +56,10 @@ def test_stdio_real_process(tmp_path):
                 assert json.loads(material.content[0].text)["coverage"]["full_day"] is False
                 denied = await session.call_tool("get_snapshot_image", {"frame_id":"x"})
                 assert denied.is_error
+                # Revocation takes effect on the next call, without restarting the server.
+                access.revoke(cfg, "cursor")
+                revoked = await session.call_tool("search_screen_history", {"query":"配信"})
+                assert revoked.is_error and "mcp-config" in revoked.content[0].text and "配信API" not in revoked.content[0].text
     asyncio.run(run())
 
 

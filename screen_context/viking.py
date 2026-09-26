@@ -4,16 +4,24 @@ import json
 import os
 import urllib.request
 from urllib.parse import urlsplit
+from . import audit
 from .crypto import atomic_write
 from .service import Service, day_range
 
 
-def export(settings, day):
-    day_range(day)
-    payload = Service(settings, "full", "viking-export").get_daily_rollup(day)
+def export(settings, day, folder=None, audited=True):
+    """Daily rollup as JSON. Audited with the day's frame IDs, like other exports, unless the caller
+    (export.write) records one row for the whole range itself."""
+    start, end = day_range(day)
+    service = Service(settings, "full", "viking-export", audit_path=None)
+    payload = service.get_daily_rollup(day)
     content = json.dumps(payload, ensure_ascii=False, indent=2).encode()
-    path = settings.root / "exports" / (day + ".json")
+    path = (folder or settings.root / "exports") / (day + ".json")
     atomic_write(path, content)
+    if audited:
+        ids = [r["id"] for r in service.rows(start, end)]
+        audit.record(settings, "user", "cli", "export", params={"format": "viking", "day": day, "paths": [str(path)]},
+                     frame_ids=ids, count=len(ids))
     return path
 
 

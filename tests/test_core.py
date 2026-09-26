@@ -146,15 +146,22 @@ def test_tools_and_no_capture_import(settings):
         assert all(t.annotations.read_only_hint or t.name == "submit_proposal" for t in tools)
 
 
-def test_http_auth():
+def test_http_auth(settings):
+    from screen_context import access
     from screen_context.mcp_server import BearerGate
-    called=[]
-    async def app(scope, receive, send): called.append(True)
-    async def invoke(headers):
-        messages=[]
+    from screen_context.service import CURRENT_CLIENT
+    standard, full = access.issue(settings, "cursor"), access.issue(settings, "agent", "full")
+    called = []
+    async def app(scope, receive, send): called.append(CURRENT_CLIENT.get())
+    async def invoke(token, profile="standard"):
+        messages = []
         async def send(message): messages.append(message)
-        await BearerGate(app, "t"*32)({"type":"http","headers":headers}, None, send)
-        return messages
-    assert asyncio.run(invoke([]))[0]["status"] == 401
-    asyncio.run(invoke([(b"authorization", b"Bearer "+b"t"*32)]))
-    assert called == [True]
+        headers = [] if token is None else [(b"authorization", ("Bearer " + token).encode())]
+        await BearerGate(app, settings, profile)({"type": "http", "headers": headers}, None, send)
+        return messages[0]["status"] if messages else None
+    assert asyncio.run(invoke(None)) == 401 and asyncio.run(invoke("sc_" + "t" * 43)) == 401
+    assert asyncio.run(invoke(standard, "full")) == 401  # profile ceiling
+    assert asyncio.run(invoke(standard)) is None and asyncio.run(invoke(full)) is None
+    assert called == ["cursor", "agent"] and CURRENT_CLIENT.get() is None
+    access.revoke(settings, "cursor")
+    assert asyncio.run(invoke(standard)) == 401

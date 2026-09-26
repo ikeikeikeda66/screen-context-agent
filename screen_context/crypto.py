@@ -19,6 +19,26 @@ def get_key(settings, create=False):
     return key
 
 
+def store_key(settings, key):
+    """Put a key (restored from a backup) into the OS credential store for this data folder."""
+    if os.environ.get("SCREEN_CONTEXT_KEY"):
+        if bytes.fromhex(os.environ["SCREEN_CONTEXT_KEY"]) != key: raise RuntimeError("SCREEN_CONTEXT_KEY does not match the backup's key")
+        return
+    import keyring
+    keyring.set_password("screen-context-agent", str(settings.root), key.hex())
+
+
+def delete_key(settings):
+    """Remove the key from the OS credential store. False when the key comes from SCREEN_CONTEXT_KEY,
+    which only the user can remove."""
+    if os.environ.get("SCREEN_CONTEXT_KEY"): return False
+    import keyring
+    from keyring.errors import PasswordDeleteError
+    try: keyring.delete_password("screen-context-agent", str(settings.root))
+    except PasswordDeleteError: pass  # already gone
+    return True
+
+
 def seal(data, key):
     nonce = os.urandom(12)
     return b"SCA1" + nonce + AESGCM(key).encrypt(nonce, data, b"screen-context-v1")

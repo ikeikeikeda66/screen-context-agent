@@ -16,6 +16,19 @@ class Backend:
         self.user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
         self.user.IsWindow.argtypes = [wintypes.HWND]
         self.user.IsWindow.restype = wintypes.BOOL
+        self.user.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        self.user.OpenInputDesktop.restype = wintypes.HANDLE
+        self.user.SwitchDesktop.argtypes = [wintypes.HANDLE]
+        self.user.CloseDesktop.argtypes = [wintypes.HANDLE]
+
+    def session_locked(self):
+        """True while the lock screen (or another secure desktop) has the input. Windows Graphics
+        Capture must not be started then: on real hardware the capture library crashes the whole
+        process with an access violation that no Python handler can catch (#47)."""
+        desktop = self.user.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+        if not desktop: return True  # the input desktop is not ours: locked or secure
+        try: return not self.user.SwitchDesktop(desktop)
+        finally: self.user.CloseDesktop(desktop)
 
     def window_identity(self, hwnd):
         import psutil
@@ -53,12 +66,23 @@ class Backend:
         if not self.user.GetLastInputInfo(ctypes.byref(value)): raise ctypes.WinError()
         return ((ctypes.windll.kernel32.GetTickCount() - value.dwTime) & 0xffffffff)/1000
 
+    # MB_YESNO | MB_DEFBUTTON2 (denial is the default) | MB_SETFOREGROUND | MB_TOPMOST. The dialogs come
+    # from a capture worker process that owns no window, so without the last two they can open behind
+    # other windows and only flash in the taskbar while the caller waits.
+    DIALOG = 0x4 | 0x100 | 0x10000 | 0x40000
+
     def approve_current(self):
-        # MB_YESNO | MB_DEFBUTTON2: denial is the default.
         from ..config import Settings
         from ..i18n import resolve, t
         lang = resolve(Settings.environment())
-        return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", 0x104) == 6
+        return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", self.DIALOG) == 6
+
+    def approve_client(self, name, profile):
+        from ..config import Settings
+        from ..i18n import resolve, t
+        lang = resolve(Settings.environment())
+        text = t("client.title", lang, name=name) + "\n\n" + t("client.body", lang, name=name, profile=profile)
+        return self.user.MessageBoxW(None, text, "Screen Context", self.DIALOG) == 6
 
     def capture(self, front):
         from windows_capture import WindowsCapture

@@ -26,6 +26,12 @@ def spool(settings, image, metadata):
     return record
 
 
+def locked(adapter):
+    """Platforms that can tell report a locked session; capture is skipped until it unlocks."""
+    check = getattr(adapter, "session_locked", None)
+    return bool(check and check())
+
+
 def backend():
     import sys
     if sys.platform == "darwin":
@@ -43,11 +49,12 @@ def run(settings, once=False, stop=None):
     previous_hash, previous_identity, last_saved = None, None, 0
     last_probe = None
     while not stop.is_set():
+        from .broker import process_client_requests, process_requests
+        process_client_requests(settings, adapter)
         if (settings.root / "paused").exists():
             last_probe = None
             if once: return {"status": "paused"}
             stop.wait(1); continue
-        from .broker import process_requests
         process_requests(settings, adapter)
         interval = settings.capture_interval()
         if not once and last_probe is not None and time.monotonic() < last_probe + interval:
@@ -64,6 +71,10 @@ def run(settings, once=False, stop=None):
         if denied(settings.policy(), front):
             previous_identity = None
             if once: return {"status": "excluded"}
+            stop.wait(1); continue
+        if locked(adapter):
+            previous_identity = None
+            if once: return {"status": "locked"}
             stop.wait(1); continue
         try:
             image, meta = adapter.capture(front)

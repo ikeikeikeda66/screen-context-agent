@@ -48,7 +48,28 @@ CREATE TABLE IF NOT EXISTS notification_outbox (
 );
 """
 
-MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2}
+# Version 3: the audit log moves from plaintext audit.jsonl into the encrypted database
+# and records query text and returned frames, so the user can see what each client read
+# (and purge it later). clients holds per-client tokens (hash only); skip_counts records
+# how many frames were not stored and why, never their content.
+SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS audit (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, path TEXT NOT NULL CHECK (path IN ('agent', 'user')),
+ client TEXT NOT NULL, profile TEXT, action TEXT NOT NULL, query TEXT, params TEXT NOT NULL DEFAULT '{}',
+ frame_ids TEXT NOT NULL DEFAULT '[]', result_count INTEGER NOT NULL DEFAULT 0, legacy_sha256 TEXT
+);
+CREATE INDEX IF NOT EXISTS audit_ts ON audit(ts);
+CREATE INDEX IF NOT EXISTS audit_client ON audit(client, ts);
+CREATE TABLE IF NOT EXISTS clients (
+ name TEXT PRIMARY KEY, token_sha256 TEXT NOT NULL UNIQUE, profile TEXT NOT NULL, state TEXT NOT NULL,
+ created_at REAL NOT NULL, approved_at REAL, revoked_at REAL
+);
+CREATE TABLE IF NOT EXISTS skip_counts (
+ day TEXT NOT NULL, category TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, category)
+);
+"""
+
+MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2, 3: SCHEMA_V3}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
@@ -67,13 +88,12 @@ def connect(settings, readonly=False, migrating=False):
         con.row_factory = driver.Row
         con.execute("PRAGMA busy_timeout=10000")
         if readonly: con.execute("PRAGMA query_only=ON")
-        else:
-            con.execute("PRAGMA journal_mode=WAL")
-            version = con.execute("PRAGMA user_version").fetchone()[0]
-            # Writers refuse both directions of mismatch: an outdated DB needs an explicit
-            # migration (with a backup), and a newer DB must not be written by an old binary.
-            if not migrating and version not in (0, SCHEMA_VERSION):
-                raise RuntimeError(f"Database schema version {version} does not match {SCHEMA_VERSION}; run screen-context init after backing up history.db")
+        else: con.execute("PRAGMA journal_mode=WAL")
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+        # Both readers and writers refuse a mismatch: an outdated DB needs an explicit migration
+        # (with a backup), and a newer DB must not be read or written by an old binary.
+        if not migrating and version not in (0, SCHEMA_VERSION):
+            raise RuntimeError(f"Database schema version {version} does not match {SCHEMA_VERSION}; run screen-context init after backing up history.db")
         yield con
         if not readonly: con.commit()
     except BaseException:
@@ -96,9 +116,33 @@ def migrate(con):
 def initialize(settings):
     settings.prepare()
     if not settings.plaintext: get_key(settings, create=True)
-    with connect(settings, migrating=True) as con: versions = migrate(con)
+    legacy = settings.root / "audit.jsonl"
+    with connect(settings, migrating=True) as con:
+        versions = migrate(con)
+        if legacy.exists():
+            from .audit import import_jsonl
+            import_jsonl(con, legacy)
+    # Only after the import has committed: the plaintext log must not outlive its copy, nor vanish without one.
+    legacy.unlink(missing_ok=True)
     settings.db.chmod(0o600)
     return versions
+
+
+def snapshot(settings, path):
+    """Consistent copy of the database while writers may be running, encrypted with the same key."""
+    with connect(settings, readonly=True) as source:
+        driver = sqlite3 if settings.plaintext else __import__("sqlcipher3.dbapi2", fromlist=["dbapi2"])
+        target = driver.connect(str(path))
+        try:
+            if not settings.plaintext: target.execute('PRAGMA key = "x\'' + get_key(settings).hex() + '\'"')
+            source.backup(target)
+        finally: target.close()
+
+
+def count_skip(con, day, category):
+    """Count a frame that was not stored, by reason only."""
+    con.execute("INSERT INTO skip_counts (day, category, count) VALUES (?, ?, 1) "
+                "ON CONFLICT(day, category) DO UPDATE SET count = count + 1", (day, category))
 
 
 def insert(con, record):

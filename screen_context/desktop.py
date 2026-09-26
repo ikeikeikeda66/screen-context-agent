@@ -25,12 +25,15 @@ def worker(kind, settings, stop):
 
 
 class Workers:
-    def __init__(self, settings, context=None):
+    def __init__(self, settings, context=None, max_restarts=3, window=600):
         self.settings = settings
         self.context = context or multiprocessing.get_context("spawn")
         self.processes = {}
         self.stop_event = None
         self.stopping = False
+        # A worker that crashes natively (for example inside the capture library when the session
+        # locks, #47) is restarted, up to max_restarts per window seconds; beyond that it stays down.
+        self.max_restarts, self.window, self.restarts = max_restarts, window, []
 
     def start(self):
         if any(p.is_alive() for p in self.processes.values()):
@@ -40,13 +43,29 @@ class Workers:
         self.stop_event = self.context.Event()
         self.stopping = False
         try:
-            for kind in ("index", "capture"):
-                p = self.context.Process(target=worker, args=(kind, self.settings, self.stop_event), name="ScreenContext-"+kind)
-                p.start()
-                self.processes[kind] = p
+            for kind in ("index", "capture"): self.spawn(kind)
         except Exception:
             self.stop()
             raise
+
+    def spawn(self, kind):
+        p = self.context.Process(target=worker, args=(kind, self.settings, self.stop_event), name="ScreenContext-"+kind)
+        p.start()
+        self.processes[kind] = p
+
+    def may_restart(self):
+        now = time.monotonic()
+        self.restarts = [t for t in self.restarts if now - t < self.window]
+        return len(self.restarts) < self.max_restarts
+
+    def restart(self, kind):
+        self.restarts.append(time.monotonic())
+        if kind == "capture":
+            # The crash leaves no status of its own; record it so the window shows that it happened.
+            from .crypto import atomic_write
+            atomic_write(self.settings.root / "capture-status.json",
+                         json.dumps({"ts": time.time(), "status": "error", "error_type": "WorkerRestarted"}).encode())
+        self.spawn(kind)
 
     def stop(self):
         self.stopping = True
@@ -54,9 +73,12 @@ class Workers:
 
     def poll(self):
         states = {}
-        for kind, p in self.processes.items():
+        for kind, p in list(self.processes.items()):
             states[kind] = "running" if p.is_alive() else "stopped" if p.exitcode == 0 else "failed"
             if not p.is_alive(): p.join(timeout=0)
+            if states[kind] == "failed" and not self.stopping and self.may_restart():
+                self.restart(kind)
+                states[kind] = "running"
         # A dead capture/indexer must not leave its peer running indefinitely.
         if states and not self.stopping and any(s != "running" for s in states.values()): self.stop()
         return states
@@ -77,6 +99,6 @@ def status_text(path, lang="en"):
         return t("status.none", lang)
 
 
-def mcp_config(command, settings, profile="standard", client="generic"):
+def mcp_config(command, settings, token, profile="standard"):
     from .clients import server_entry
-    return {"mcpServers": {"screen-context": server_entry(command, settings, profile, client)}}
+    return {"mcpServers": {"screen-context": server_entry(command, settings, token, profile)}}

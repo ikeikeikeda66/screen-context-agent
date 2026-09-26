@@ -19,7 +19,7 @@ Three processes, each with a narrow job:
 
 1. **Capture** (menu bar app on macOS, control window on Windows) captures only the foreground window at native resolution. Similar frames are skipped with a perceptual hash. Frames go to an encrypted spool.
 2. **Indexer** runs OCR (Apple Vision on macOS, `Windows.Media.Ocr` on Windows), applies your exclusion policy, and stores text in an SQLCipher database with a trigram FTS5 index.
-3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, only reads the database, and labels every result as untrusted observed data.
+3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, reads screen data only (it writes nothing but audit rows and proposals), requires a per-client token, and labels every result as untrusted observed data.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -84,7 +84,7 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
-The client starts the server itself over stdio. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
+The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. The first time a new token is used, the menu bar app (or the Windows control window) asks whether that client may read your screen history; the app must be running, or approve it with `screen-context clients approve NAME`. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
 ### Profiles and tools
 
@@ -122,12 +122,37 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `denied_title_patterns` | Regular expressions matched against window titles. |
 | `ide_apps` | Hidden from the `standard` profile. |
 | `ai_output_apps`, `ai_output_title_patterns` | Frames showing an assistant's own output. Proposals cannot use them as evidence. |
+| `sensitive_detectors` | Default `card_number` (13–19 digits, issuer prefix, Luhn check) and `my_number` (12 digits with a valid check digit near a 個人番号/マイナンバー label). A frame that matches is dropped whole, text and image, before anything is stored; only the reason is counted. |
+| `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | Default exclusions for the contacts app and for checkout and payment pages (by title or by a `/checkout`, `/payment` or `/billing` path in a visible URL). |
+
+| `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. Check a text with `screen-context pii-check FILE`. |
+
+The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information). Rules apply to new frames. To apply them to frames recorded earlier, run `screen-context pii-scan` (counts only), then `pii-scan --apply`: matching frames are dropped or redacted exactly as the indexer would today, previews of redacted frames are deleted, and rollups and proposal evidence follow. No undo.
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
-- After 90 days, preview images and OCR bounding boxes are deleted. Searchable OCR text and daily rollups are kept.
-- `audit.jsonl` records the client, time, tool, a SHA-256 of the arguments, and the result count. Queries themselves are not stored.
+- Retention: preview images and OCR bounding boxes are deleted after 90 days; searchable OCR text, daily rollups and the audit log are kept until you set a limit. `screen-context retention --preview 30 --text 365 --audit 365` sets the days (`none` keeps forever), and the hourly maintenance applies them. Expired text is deleted with the same cascade as `purge`. `screen-context usage` shows the space used by previews, the database, the spool and exports.
+- `screen-context purge` deletes frames for good: by time (`--from`/`--to`, or `--last 15m`), `--app`, `--keyword`, one `--block`, or `--excluded` (everything the current policy already hides). Selectors combine. Without `--yes` it only reports what would go, including which clients already received those frames and which of your exports included them. With `--yes` it also deletes the previews, unindexed spool files in the time range, the rollups' copies, proposal evidence that quoted the frames, and the query text and frame IDs in audit rows that returned them. Freed database pages are overwritten. There is no undo. Frames that already left the machine cannot be recalled.
+- The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
+- `screen-context backup FILE` writes one archive: a consistent database snapshot, previews and settings, all still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `screen-context restore FILE` asks for the passphrase before writing anything, refuses to overwrite an existing history without `--replace`, and puts the key into the credential store. Use it to move to another machine. Keep the passphrase: without it the archive cannot be opened.
+- `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
+
+## Threat model
+
+ScreenContext protects against:
+
+- **Someone who has the files but not the key**: a stolen disk, a copied data folder, a synced backup. The database, spool and previews are encrypted, and `backup` archives need their passphrase.
+- **An MCP client reading more than you allowed**: each client has its own token, is approved once by you, is limited to its profile, and can be revoked. The audit log shows what each client asked for and received (`screen-context audit list`).
+- **Recording what should never be kept**: exclusions, the card-number and My Number detectors, the personal-data combination rule, and `purge`.
+
+It does **not** protect against:
+
+- **Other programs running as your user.** They can start `screen-context serve` with a token copied from a client's configuration file, or read the key from the credential store, and so read your history without Screen Recording permission. Keeping the key inside a signed app is planned only if a Developer ID is adopted ([roadmap](docs/ROADMAP.md)).
+- **A local administrator.** Managed settings prevent mistakes and policy violations; they are not DRM.
+- **Instructions shown on screen** (prompt injection). Results are labeled untrusted; clients must treat them as data.
+- **Copies outside the store.** Exports and results already returned to a client are not reached by later exclusions, purges or retention. `purge` tells you when such copies exist.
+- **What OCR or the rules miss.** Detectors are pattern based: a misread card number or an unlabeled name is stored.
 
 ## Configuration
 
@@ -137,8 +162,7 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `SCREEN_CONTEXT_KEY` | 64 hex characters. Replaces the OS credential store (headless use). |
 | `SCREEN_CONTEXT_LANG` | `en` or `ja`. Overrides the saved language. |
 | `SCREEN_CONTEXT_OCR_LANGUAGES` | Comma-separated OCR languages, for example `en-US,ja-JP`. macOS default: `ja-JP,en-US`. Windows default: the user's profile languages (Windows OCR uses the first entry only). |
-| `SCREEN_CONTEXT_CLIENT` | Client name written to the audit log. |
-| `SCREEN_CONTEXT_TOKEN` | Bearer token (32+ characters) for the HTTP transport. |
+| `SCREEN_CONTEXT_CLIENT_TOKEN` | The client's token, set by `mcp-config`. The server refuses to start without a valid one. |
 
 The language can also be set with `screen-context language en|ja|system`.
 
@@ -152,11 +176,21 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
-screen-context export DATE | push DATE
+screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
+screen-context wipe                     delete the key, then all data (no undo)
+screen-context usage                    disk space by kind of data
+screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
+screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
+screen-context pii-check FILE           which sensitive-input rules a text would trigger
+screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
+screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
+screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context push DATE                send one day to a local OpenViking server
 ```
 
 ### Optional: diary material and periodic proposals
@@ -164,9 +198,13 @@ screen-context export DATE | push DATE
 - `diary-material DATE` prints a compact, bounded Markdown summary of one day, for use as input to a diary or daily report prompt.
 - `proposal prepare` is designed as a pre-run script for a scheduler (cron or an agent framework). It prints material only when there are new observations. Otherwise its last line is `{"wakeAgent": false, ...}`, so the scheduler can skip starting the agent. The agent registers a suggestion with `submit_proposal`; evidence must be a quote from a non-assistant frame, and the same conclusion is suppressed for 24 hours. Close the run with `proposal finish --run-id ID --response-file FILE`.
 
-### Optional: OpenViking export
+### Export
 
-`export DATE` writes a daily rollup JSON to `exports/` (plaintext). `push DATE` sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
+`export --from 2026-09-01 --to 2026-10-01 --format md` writes the frames of a time range to one plaintext file in `exports/` (or `--out`): `jsonl`, `md` or `csv`, or `viking` for one rollup JSON per day. The current policy applies, IDE and terminal windows are included unless you pass `--exclude-ide`, and an existing file is never overwritten. Each export is audited with the IDs of the frames it contained, so a later `purge` of those frames warns that a copy exists. An administrator can disable exports (`export_allowed`). `export DATE` still works for one release but is deprecated.
+
+### Optional: OpenViking
+
+`push DATE` exports one day's rollup and sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
 
 ## Windows (beta)
 

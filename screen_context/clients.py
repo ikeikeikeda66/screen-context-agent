@@ -28,14 +28,15 @@ def cli_command():
     return [sys.executable, "-m", "screen_context.cli"]
 
 
-def server_entry(command, settings, profile="standard", client="generic"):
+def server_entry(command, settings, token, profile="standard"):
+    """The client proves who it is with its own token (see access.py); the server names it from the token."""
     return {"command": str(command[0]), "args": [*map(str, command[1:]), "serve", "--profile", profile],
-            "env": {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_CLIENT": client}}
+            "env": {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_CLIENT_TOKEN": token}}
 
 
-def render(client, command, settings, profile="standard"):
+def render(client, command, settings, token, profile="standard"):
     if client not in CLIENTS: raise ValueError("Unknown client; choose one of " + ", ".join(CLIENTS))
-    entry = server_entry(command, settings, profile, client)
+    entry = server_entry(command, settings, token, profile)
     if client == "claude-code":
         env = [part for key, value in entry["env"].items() for part in ("--env", f"{key}={value}")]
         return shlex.join(["claude", "mcp", "add", "--scope", "user", *env, "screen-context", "--", entry["command"], *entry["args"]])
