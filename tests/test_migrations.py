@@ -27,3 +27,17 @@ def test_readonly_connect_also_refuses_a_schema_mismatch(tmp_path):
     con = sqlite3.connect(s.db); con.executescript(store.SCHEMA + "PRAGMA user_version=1;"); con.close()
     with pytest.raises(RuntimeError, match="schema version"):
         with store.connect(s, readonly=True) as c: pass
+
+
+def test_health_reports_an_outdated_database_instead_of_failing(tmp_path):
+    import json, subprocess, sys
+    s = Settings(tmp_path, plaintext=True); s.prepare()
+    con = sqlite3.connect(s.db); con.executescript(store.SCHEMA + store.SCHEMA_V2 + "PRAGMA user_version=2;"); con.close()
+    env = {"SCREEN_CONTEXT_HOME": str(tmp_path), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin"}
+    out = subprocess.run([sys.executable, "-m", "screen_context.cli", "health"], env=env, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    report = json.loads(out.stdout)
+    assert report["state"] == "needs_init" and report["database_schema"] == 2 and report["schema_version"] == store.SCHEMA_VERSION
+    store.initialize(s)
+    from screen_context.health import health
+    assert health(s)["state"] != "needs_init" and health(s)["database_schema"] == store.SCHEMA_VERSION
