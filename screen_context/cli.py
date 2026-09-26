@@ -1,12 +1,17 @@
 import argparse
 import json
 import signal
+import sys
 import threading
 from .config import Settings
 from .service import PROFILES, PROFILE_ALIASES
 
 
 def main():
+    # A frozen (PyInstaller) build ignores PYTHONIOENCODING and falls back to the
+    # system code page, corrupting non-ASCII output; fix the streams ourselves.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Local screen context capture, index and MCP")
     sub = parser.add_subparsers(dest="command", required=True)
     for cmd in ("init", "status", "pause", "resume", "maintain", "health"): sub.add_parser(cmd)
@@ -83,7 +88,6 @@ def main():
     elif args.command == "mcp-config":
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
-        import sys
         print("Add to: " + CLIENTS[args.client], file=sys.stderr)
         print(render(args.client, cli_command(), settings, profile_name(args.profile))); return
     elif args.command == "language":
