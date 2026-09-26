@@ -60,3 +60,14 @@ def test_cli_audit_list_and_export_is_itself_audited(settings):
 
 def test_record_rejects_unknown_path(settings):
     with pytest.raises(ValueError): audit.record(settings, "mcp", "x", "y")
+
+
+def test_internal_and_user_reads_are_not_logged_as_agent_reads(settings):
+    from screen_context.indexer import maintain
+    from screen_context.material import diary_markdown
+    from datetime import datetime
+    add(settings, "配信API仕様")
+    maintain(settings)
+    assert audit.rows(settings) == []  # hourly rollups hand nothing to anyone
+    diary_markdown(settings, datetime.now().strftime("%Y-%m-%d"))
+    assert {e["path"] for e in audit.rows(settings)} == {"user"}

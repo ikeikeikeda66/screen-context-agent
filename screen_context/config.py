@@ -13,6 +13,13 @@ DEFAULT_POLICY = {
     # Frames from these apps (or with matching titles) show an assistant's output, not new facts about the user.
     "ai_output_apps": ["com.anthropic.claudefordesktop", "com.openai.codex", "com.openai.chat", "claude.exe", "ChatGPT.exe"],
     "ai_output_title_patterns": [],
+    # Sensitive-input rules (roadmap decision 11). They live in their own keys because `prepare`
+    # writes every key into policy.json: new defaults under an existing key would never reach
+    # existing users. Set a key to [] to turn that rule off.
+    "sensitive_detectors": ["card_number", "my_number"],
+    "sensitive_apps": ["com.apple.AddressBook"],
+    "sensitive_title_patterns": [r"(?i)\bcheckout\b|payment details|billing information|お支払い(方法|手続き|情報)|ご注文手続き|レジに進む"],
+    "sensitive_url_patterns": [r"(?i)/(checkout|payment|billing)(?:[/?#]|$)"],
     "ide_apps": ["com.microsoft.VSCode", "com.apple.Terminal", "com.googlecode.iterm2", "com.jetbrains.pycharm", "com.jetbrains.intellij", "com.todesktop.230313mzl4w4u92", "com.openai.codex", "Code.exe", "WindowsTerminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "idea64.exe", "pycharm64.exe", "Cursor.exe"],
 }
 
@@ -96,5 +103,8 @@ class Settings:
         for key, values in result.items():
             if not isinstance(values, list) or any(not isinstance(x, str) or not x for x in values):
                 raise ValueError(f"Invalid policy: {key}")
-        for pattern in result["denied_title_patterns"]: re.compile(pattern)
+        for key in ("denied_title_patterns", "sensitive_title_patterns", "sensitive_url_patterns"):
+            for pattern in result[key]: re.compile(pattern)
+        from .sensitive import DETECTORS
+        if set(result["sensitive_detectors"]) - set(DETECTORS): raise ValueError("Invalid policy: sensitive_detectors")
         return result, origin

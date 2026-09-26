@@ -45,6 +45,7 @@ The schema version is stored in `PRAGMA user_version` (currently 3). Writers ref
 - Exclusions (`policy.json`) are applied at capture, after OCR, and again on every read. Changing the policy therefore hides old data from every tool without rewriting the database.
 - Domain exclusions depend on the URL being visible in the OCR text. They are not a complete block.
 - The `standard` profile also hides IDE and terminal apps.
+- Sensitive-input detectors (`sensitive.py`: card numbers with a Luhn check, My Number with its check digit and a nearby label) run in the indexer after OCR. A match drops the frame before any image or row is written and increments `skip_counts` by reason only. Contacts apps and checkout pages are excluded like any other policy rule, at capture, after OCR and on every read.
 - Search queries are passed to FTS5 as quoted literals, so they cannot inject FTS operators. Queries shorter than 3 characters use a substring match.
 - The audit log stores the query text inside the encrypted database, so the user can see what each client read. It is readable on the user path only (CLI, later the UI), never over MCP.
 - Results are wrapped with `source=observed_screen` and `trust=untrusted`. This labels the data; it does not neutralize prompt injection. Clients must treat screen text as data.

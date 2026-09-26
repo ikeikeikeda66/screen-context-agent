@@ -129,6 +129,12 @@ def initialize(settings):
     return versions
 
 
+def count_skip(con, day, category):
+    """Count a frame that was not stored, by reason only."""
+    con.execute("INSERT INTO skip_counts (day, category, count) VALUES (?, ?, 1) "
+                "ON CONFLICT(day, category) DO UPDATE SET count = count + 1", (day, category))
+
+
 def insert(con, record):
     columns = ("id", "ts", "app_bundle", "app_name", "window_title", "display_id", "dhash", "image_path", "ocr_text", "ocr_json", "domains", "src_w", "src_h", "ocr_ms")
     con.execute("INSERT OR IGNORE INTO frames (" + ",".join(columns) + ") VALUES (" + ",".join("?" for _ in columns) + ")", [record.get(k) for k in columns])

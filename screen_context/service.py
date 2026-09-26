@@ -42,9 +42,11 @@ def day_range(day):
 
 
 class Service:
-    def __init__(self, settings, profile="standard", client=None):
+    def __init__(self, settings, profile="standard", client=None, audit_path="agent"):
+        """`audit_path` is "agent" for MCP clients, "user" for the user's own CLI reads,
+        and None for internal work (rollups) that hands nothing to anyone."""
         profile = profile_name(profile)
-        self.settings, self.profile, self.client = settings, profile, client or profile
+        self.settings, self.profile, self.client, self.audit_path = settings, profile, client or profile, audit_path
 
     def rows(self, since=0, until=None, query=None):
         policy = self.settings.policy()
@@ -70,8 +72,9 @@ class Service:
         arguments = dict(arguments)
         query = arguments.pop("query", None)
         returned = [i for r in records for i in ([r["frame_id"]] if "frame_id" in r else r.get("frame_ids", []))]
-        audit.record(self.settings, "agent", CURRENT_CLIENT.get() or self.client, tool, profile=self.profile, query=query,
-                     params=arguments, frame_ids=returned, count=len(records))
+        if self.audit_path:
+            audit.record(self.settings, self.audit_path, CURRENT_CLIENT.get() or self.client, tool, profile=self.profile,
+                         query=query, params=arguments, frame_ids=returned, count=len(records))
         budget, out = 10000, []
         for rec in records:
             rec = dict(rec)

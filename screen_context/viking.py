@@ -10,7 +10,7 @@ from .service import Service, day_range
 
 def export(settings, day):
     day_range(day)
-    payload = Service(settings, "full", "viking-export").get_daily_rollup(day)
+    payload = Service(settings, "full", "viking-export", audit_path="user").get_daily_rollup(day)
     content = json.dumps(payload, ensure_ascii=False, indent=2).encode()
     path = settings.root / "exports" / (day + ".json")
     atomic_write(path, content)

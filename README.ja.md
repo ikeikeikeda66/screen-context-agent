@@ -122,6 +122,10 @@ open dist/ScreenContext.app
 | `denied_title_patterns` | ウィンドウタイトルに適用する正規表現。 |
 | `ide_apps` | `standard` プロファイルで返さないアプリ。 |
 | `ai_output_apps`, `ai_output_title_patterns` | アシスタント自身の出力を表示している画面。提案の根拠には使えません。 |
+| `sensitive_detectors` | 初期値は `card_number`（13〜19桁、発行者の先頭番号、Luhn チェック）と `my_number`（チェックデジットが正しい12桁で、近くに「個人番号」「マイナンバー」の表記があるもの）。該当した画面は、保存前にテキストと画像をまとめて破棄し、理由の件数だけを記録します。 |
+| `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | 連絡先アプリと、決済・支払いページ（タイトル、または表示中の URL の `/checkout`・`/payment`・`/billing` のパス）を初期状態で除外します。 |
+
+`sensitive_*` のルールは初期状態で有効です。無効にするにはキーを `[]` にします。不正なルールは読み飛ばさず、処理を止めます。これらはリスクベースのルールで、漏えいしたときに直接の被害が大きい入力を対象にしています。個人情報の定義ではありません（法律上は氏名だけでも個人情報に該当しえます）。ルールを追加する前に記録したデータには適用されません。
 
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
