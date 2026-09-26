@@ -98,9 +98,42 @@ def plan(settings, ids, spool_files=()):
             "days": sorted({datetime.fromtimestamp(r["ts"]).strftime("%Y-%m-%d") for r in rows}), "already_received_by": already}
 
 
-def execute(settings, ids, selector, spool_files=(), actor="cli"):
-    """Delete the frames and everything derived from them. Returns the plan that was carried out."""
+def redact_outbox(con, ids):
+    """Proposal evidence quotes frame text, so evidence citing these frames goes too."""
+    wanted = set(ids)
+    for row in con.execute("SELECT id, frame_ids FROM notification_outbox").fetchall():
+        if wanted & set(json.loads(row["frame_ids"])):
+            con.execute("UPDATE notification_outbox SET body = ?, frame_ids = '[]' WHERE id = ?", (PURGED, row["id"]))
+
+
+def rebuild_rollups(settings, days):
     from .service import Service
+    service = Service(settings, "full", "purge", audit_path=None)
+    rollups = {day: service.get_daily_rollup(day) for day in days}
+    with store.connect(settings) as con:
+        con.execute("PRAGMA secure_delete=ON")
+        for day, payload in rollups.items():
+            if payload["count"]: con.execute("INSERT OR REPLACE INTO rollups VALUES (?, ?)", (day, json.dumps(payload, ensure_ascii=False)))
+            else: con.execute("DELETE FROM rollups WHERE day = ?", (day,))
+
+
+def finish(settings, images=(), spool_files=()):
+    """Checkpoint the WAL so removed text is not left in it, then delete files."""
+    with store.connect(settings) as con: con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    folder = (settings.root / "images").resolve()
+    for name in images:
+        path = (folder / name).resolve()
+        if path.parent == folder: path.unlink(missing_ok=True)
+    for path in spool_files: path.unlink(missing_ok=True)
+
+
+def selector_digest(selector):
+    # Hashed: a keyword purge must not leave the keyword behind in the log.
+    return hashlib.sha256(json.dumps(selector, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def execute(settings, ids, selector, spool_files=(), actor="cli", action="purge"):
+    """Delete the frames and everything derived from them. Returns the plan that was carried out."""
     summary = plan(settings, ids, spool_files)
     wanted = set(ids)
     with store.connect(settings) as con:
@@ -111,9 +144,7 @@ def execute(settings, ids, selector, spool_files=(), actor="cli"):
             marks = ",".join("?" * len(chunk))
             con.execute(f"DELETE FROM frames WHERE id IN ({marks})", chunk)  # trigger removes the FTS entry
             con.execute(f"DELETE FROM indexed_events WHERE frame_id IN ({marks})", chunk)
-        for row in con.execute("SELECT id, frame_ids FROM notification_outbox").fetchall():
-            if wanted & set(json.loads(row["frame_ids"])):
-                con.execute("UPDATE notification_outbox SET body = ?, frame_ids = '[]' WHERE id = ?", (PURGED, row["id"]))
+        redact_outbox(con, ids)
         for row in con.execute("SELECT id, frame_ids FROM audit WHERE frame_ids != '[]'").fetchall():
             returned = json.loads(row["frame_ids"])
             if wanted & set(returned):
@@ -122,21 +153,8 @@ def execute(settings, ids, selector, spool_files=(), actor="cli"):
         if selector.get("keyword"):
             con.execute("UPDATE audit SET query = NULL WHERE instr(lower(query), lower(?)) > 0", (selector["keyword"],))
         con.execute("INSERT INTO frames_fts(frames_fts) VALUES('optimize')")
-    service = Service(settings, "full", "purge", audit_path=None)
-    rollups = {day: service.get_daily_rollup(day) for day in summary["days"]}
-    with store.connect(settings) as con:
-        con.execute("PRAGMA secure_delete=ON")
-        for day, payload in rollups.items():
-            if payload["count"]: con.execute("INSERT OR REPLACE INTO rollups VALUES (?, ?)", (day, json.dumps(payload, ensure_ascii=False)))
-            else: con.execute("DELETE FROM rollups WHERE day = ?", (day,))
-    with store.connect(settings) as con: con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    folder = (settings.root / "images").resolve()
-    for name in images:
-        path = (folder / name).resolve()
-        if path.parent == folder: path.unlink(missing_ok=True)
-    for path in spool_files: path.unlink(missing_ok=True)
-    # The selector is hashed: a keyword purge must not leave the keyword behind in the log.
-    digest = hashlib.sha256(json.dumps(selector, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    audit.record(settings, "user", actor, "purge", params={"selector_sha256": digest, "images": summary["images"],
+    rebuild_rollups(settings, summary["days"])
+    finish(settings, images, spool_files)
+    audit.record(settings, "user", actor, action, params={"selector_sha256": selector_digest(selector), "images": summary["images"],
                  "spool_files": summary["spool_files"], "days": summary["days"]}, count=summary["frames"])
     return summary

@@ -36,6 +36,8 @@ def main():
     purge.add_argument("--app", help="bundle ID or process name"); purge.add_argument("--keyword"); purge.add_argument("--block", help="activity block ID")
     purge.add_argument("--excluded", action="store_true", help="frames the current policy excludes (hidden until now)")
     purge.add_argument("--yes", action="store_true", help="delete; without it, only show what would be deleted")
+    rescan = sub.add_parser("pii-scan", help="Apply the sensitive-input rules to frames stored before they existed")
+    rescan.add_argument("--apply", action="store_true", help="drop and redact; without it, only count")
     check = sub.add_parser("pii-check", help="Show which sensitive-input rules a text file would trigger")
     check.add_argument("file")
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
@@ -93,6 +95,14 @@ def main():
                       "next": "Run again with --yes to delete. This cannot be undone."}
         elif not ids and not spool_files: result = {"frames": 0, "deleted": False}
         else: result = {**purge.execute(settings, ids, selector, spool_files), "deleted": True}
+    elif args.command == "pii-scan":
+        from . import rescan
+        drops, redactions = rescan.scan(settings)
+        if not args.apply:
+            result = {**rescan.report(settings, drops, redactions), "applied": False,
+                      "next": "Run again with --apply to drop and redact. This cannot be undone."}
+        elif not drops and not redactions: result = {"frames": {"drop": 0, "redact": 0}, "applied": False}
+        else: result = {**rescan.apply(settings, drops, redactions), "applied": True}
     elif args.command == "pii-check":
         from pathlib import Path
         from .config import DEFAULT_POLICY
