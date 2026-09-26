@@ -88,13 +88,12 @@ def connect(settings, readonly=False, migrating=False):
         con.row_factory = driver.Row
         con.execute("PRAGMA busy_timeout=10000")
         if readonly: con.execute("PRAGMA query_only=ON")
-        else:
-            con.execute("PRAGMA journal_mode=WAL")
-            version = con.execute("PRAGMA user_version").fetchone()[0]
-            # Writers refuse both directions of mismatch: an outdated DB needs an explicit
-            # migration (with a backup), and a newer DB must not be written by an old binary.
-            if not migrating and version not in (0, SCHEMA_VERSION):
-                raise RuntimeError(f"Database schema version {version} does not match {SCHEMA_VERSION}; run screen-context init after backing up history.db")
+        else: con.execute("PRAGMA journal_mode=WAL")
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+        # Both readers and writers refuse a mismatch: an outdated DB needs an explicit migration
+        # (with a backup), and a newer DB must not be read or written by an old binary.
+        if not migrating and version not in (0, SCHEMA_VERSION):
+            raise RuntimeError(f"Database schema version {version} does not match {SCHEMA_VERSION}; run screen-context init after backing up history.db")
         yield con
         if not readonly: con.commit()
     except BaseException:

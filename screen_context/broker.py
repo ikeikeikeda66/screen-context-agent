@@ -45,7 +45,14 @@ def request_client(settings, name, timeout=60, poll=.25):
     from .access import state
     path = settings.root / "requests" / (hashlib.sha256(name.encode()).hexdigest()[:32] + ".client")
     deadline = time.time() + timeout
-    if not path.exists(): atomic_write(path, json.dumps({"name": name, "expires": deadline}).encode())
+
+    def shared_expiry():
+        try: return float(json.loads(path.read_text())["expires"])
+        except (OSError, ValueError, KeyError): return 0.0
+
+    # A later caller with a longer timeout must extend the shared deadline, or its own wait
+    # would be cut short by an earlier caller's cleanup once that caller's deadline passes.
+    if deadline > shared_expiry(): atomic_write(path, json.dumps({"name": name, "expires": deadline}).encode())
     try:
         while time.time() < deadline:
             current = state(settings, name)
@@ -53,8 +60,9 @@ def request_client(settings, name, timeout=60, poll=.25):
             time.sleep(poll)
         return state(settings, name)
     finally:
-        # An unanswered request must not pop up later, after the client has given up.
-        if state(settings, name) == "pending": path.unlink(missing_ok=True)
+        # Only withdraw the request once the shared (possibly extended) deadline has passed,
+        # so a shorter-timeout caller giving up does not withdraw it for a longer-timeout one.
+        if state(settings, name) == "pending" and time.time() >= shared_expiry(): path.unlink(missing_ok=True)
 
 
 def process_client_requests(settings, adapter):

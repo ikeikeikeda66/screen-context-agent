@@ -20,3 +20,10 @@ def test_v1_to_v2(tmp_path):
         assert c.execute("PRAGMA user_version").fetchone()[0] == 3
     con = sqlite3.connect(s.db); con.execute("PRAGMA user_version=9"); con.commit(); con.close()
     with pytest.raises(RuntimeError): store.initialize(s)
+
+
+def test_readonly_connect_also_refuses_a_schema_mismatch(tmp_path):
+    s = Settings(tmp_path, plaintext=True); s.prepare()
+    con = sqlite3.connect(s.db); con.executescript(store.SCHEMA + "PRAGMA user_version=1;"); con.close()
+    with pytest.raises(RuntimeError, match="schema version"):
+        with store.connect(s, readonly=True) as c: pass

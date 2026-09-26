@@ -87,6 +87,27 @@ def test_unanswered_request_times_out_and_is_withdrawn(settings, running_app):
     assert not requests(settings) and access.state(settings, "cursor") == "pending"
 
 
+def test_shorter_timeout_caller_does_not_withdraw_the_request_for_a_longer_one(settings, running_app):
+    access.issue(settings, "agent")
+    results = {}
+    def short():
+        try: access.admit(settings, "agent", timeout=.2)
+        except PermissionError as error: results["short"] = str(error)
+    def waits_longer():
+        results["long"] = access.admit(settings, "agent", timeout=2)
+    t_short = threading.Thread(target=short); t_short.start()
+    time.sleep(.05)
+    t_long = threading.Thread(target=waits_longer); t_long.start()
+    time.sleep(.4)  # the short caller's own deadline has passed
+    assert requests(settings), "the shared request must survive a shorter-timeout caller's own deadline"
+    app = App(True)
+    stop, thread = answering(settings, app)
+    try:
+        t_short.join(); t_long.join()
+    finally: stop.set(); thread.join()
+    assert results["long"] == "agent"
+
+
 def test_request_file_cannot_choose_the_profile_or_approve_other_clients(settings):
     access.issue(settings, "cursor")  # standard
     active = access.issue(settings, "trusted", "full"); access.decide(settings, "trusted", True, "cli")

@@ -71,7 +71,7 @@ class Service:
         # for and received. Auditing fails closed: no audit row, no result.
         arguments = dict(arguments)
         query = arguments.pop("query", None)
-        returned = [i for r in records for i in ([r["frame_id"]] if "frame_id" in r else r.get("frame_ids", []))]
+        returned = [i for r in records for i in (r["frame_ids"] if "frame_ids" in r else [r["frame_id"]] if "frame_id" in r else [])]
         if self.audit_path:
             audit.record(self.settings, self.audit_path, CURRENT_CLIENT.get() or self.client, tool, profile=self.profile,
                          query=query, params=arguments, frame_ids=returned, count=len(records))
@@ -136,7 +136,7 @@ class Service:
         start, end = day_range(day)
         activities = blocks(self.rows(start, end))
         selected = activities[offset:offset+limit]
-        records = [{"frame_id": b["block_id"], "start_ts": b["start_ts"],
+        records = [{"frame_id": b["block_id"], "frame_ids": b["frame_ids"], "start_ts": b["start_ts"],
                     "end_ts": b["end_ts"], "app": b["app"],
                     "app_bundle": b["app_bundle"], "title": b["title"],
                     "frames": b["frames"], "text": b["text"][:1000],

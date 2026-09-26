@@ -24,6 +24,21 @@ def test_missing_or_unknown_token_is_refused(settings, token):
     with pytest.raises(PermissionError, match="mcp-config"): access.authenticate(settings, token, "standard")
 
 
+def test_token_lookup_uses_a_constant_time_comparison(settings, monkeypatch):
+    """Comparing token digests by SQL equality (an indexed lookup) instead of hmac.compare_digest
+    reopened a timing side channel that the previous raw-token compare_digest check closed."""
+    import hmac
+    token = access.issue(settings, "cursor")
+    calls = []
+    real_compare = hmac.compare_digest
+    def spy(a, b):
+        calls.append((a, b))
+        return real_compare(a, b)
+    monkeypatch.setattr(hmac, "compare_digest", spy)
+    assert access.authenticate(settings, token, "standard") == "cursor"
+    assert calls and any(real_compare(a, b) for a, b in calls)
+
+
 def test_profile_ceiling(settings):
     standard, full = access.issue(settings, "coder"), access.issue(settings, "agent", "full")
     with pytest.raises(PermissionError, match="standard"): access.authenticate(settings, standard, "full")

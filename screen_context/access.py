@@ -13,6 +13,7 @@ This identifies and gates clients. It does not stop malware running as the same
 user, which can read the token from the client's configuration file.
 """
 import hashlib
+import hmac
 import re
 import secrets
 import time
@@ -53,8 +54,12 @@ def authenticate(settings, token, profile):
     """Client name for a live (active or pending) token that may use `profile`; PermissionError otherwise.
     Cheap and non-blocking: the HTTP gate calls it for every request."""
     if not token: raise PermissionError(MISSING)
+    wanted = digest(token)
     with store.connect(settings, readonly=True) as con:
-        row = con.execute("SELECT name, profile, state FROM clients WHERE token_sha256 = ?", (digest(token),)).fetchone()
+        rows = con.execute("SELECT name, profile, state, token_sha256 FROM clients").fetchall()
+    # A SQL equality lookup on the digest column is not constant-time; compare every row so a
+    # request's timing cannot be used to narrow down a valid token's digest byte by byte.
+    row = next((r for r in rows if hmac.compare_digest(r["token_sha256"], wanted)), None)
     if row is None or row["state"] not in ("active", "pending"): raise PermissionError(MISSING)
     if PROFILES.index(profile_name(profile)) > PROFILES.index(row["profile"]):
         raise PermissionError(f"Client {row['name']} is limited to the {row['profile']} profile")

@@ -114,8 +114,10 @@ def main():
 
         def issue_entry():
             from .access import issue
+            # Broad on purpose: issue() also does a SQL write, which can fail with a driver-specific
+            # error (e.g. "database is locked") that isn't an OSError/RuntimeError/ValueError.
             try: show(render(client.get(), cli_command(), settings, issue(settings, client.get())))
-            except (OSError, RuntimeError, ValueError) as error:
+            except Exception as error:
                 messagebox.showerror(t("win.mcp.title", lang()), t("win.mcp.failed", lang(), error=type(error).__name__))
         ttk.Button(row, text=t("win.mcp.issue", lang()), command=issue_entry).pack(side="left", padx=6)
         client.trace_add("write", update)

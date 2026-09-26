@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import json
 import pytest
 from test_core import settings, add, change
+from screen_context import audit
 from screen_context.service import Service
 
 
@@ -18,6 +19,14 @@ def test_diary_day_pagination_and_evidence(settings):
     assert [r["frame_id"] for r in first["records"]+second["records"]] == ids
     assert all(r["excerpt_truncated"] and r["trust"] == "untrusted" for r in first["records"])
     assert sum(len(r["text"]) for r in first["records"]) <= 10000
+
+
+def test_diary_audit_records_every_frame_in_a_multi_frame_block(settings):
+    start = datetime(2026, 9, 12)
+    ids = [add(settings, ts=(start+timedelta(minutes=i)).timestamp())["id"] for i in range(3)]
+    Service(settings, "full", client="agent-x").get_diary_material("2026-09-12")
+    [entry] = audit.rows(settings)
+    assert set(entry["frame_ids"]) == set(ids)
 
 
 def test_diary_live_policy_and_profile(settings):
