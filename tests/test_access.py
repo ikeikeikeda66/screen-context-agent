@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import pytest
@@ -69,12 +70,14 @@ def test_client_names_are_validated(settings, name):
 
 
 def test_cli_serve_without_token_explains_the_fix_and_clients_commands(settings):
-    env = {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin"}
+    # SystemRoot is required on Windows for asyncio's Proactor event loop (Winsock) to initialize.
+    env = {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin",
+           "SystemRoot": os.environ.get("SystemRoot", "")}
     cli = [sys.executable, "-m", "screen_context.cli"]
-    served = subprocess.run([*cli, "serve"], env=env, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    served = subprocess.run([*cli, "serve"], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30, stdin=subprocess.DEVNULL)
     assert served.returncode != 0 and "mcp-config" in served.stderr
     subprocess.run([*cli, "mcp-config", "--client", "cursor", "--name", "cursor-work"], env=env, capture_output=True, check=True)
-    run = lambda *a: json.loads(subprocess.run([*cli, "clients", *a], env=env, capture_output=True, text=True, check=True).stdout)
+    run = lambda *a: json.loads(subprocess.run([*cli, "clients", *a], env=env, capture_output=True, text=True, encoding="utf-8", check=True).stdout)
     assert [c["name"] for c in run("list")] == ["cursor-work"]
     assert run("revoke", "cursor-work") == {"revoked": "cursor-work"}
     assert run("list")[0]["state"] == "revoked"

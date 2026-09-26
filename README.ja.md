@@ -19,7 +19,7 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 
 1. **撮影**（macOS はメニューバーアプリ、Windows は操作ウィンドウ）: 前面の 1 ウィンドウだけをネイティブ解像度で取得します。知覚ハッシュで似た画面を省き、暗号化したスプールに書き込みます。
 2. **indexer**: OCR（macOS は Apple Vision、Windows は `Windows.Media.Ocr`）を実行し、除外ポリシーを適用して、SQLCipher のデータベースとトライグラム FTS5 索引に保存します。
-3. **MCP サーバー**（`screen-context serve`）: MCP クライアントが起動します。撮影コードを読み込まず、データベースを読むだけです。すべての結果に「信頼できない観測データ」のラベルを付けます。
+3. **MCP サーバー**（`screen-context serve`）: MCP クライアントが起動します。撮影コードを読み込まず、画面データは読むだけです（書き込むのは監査記録と提案だけです）。クライアントごとのトークンが必要で、すべての結果に「信頼できない観測データ」のラベルを付けます。
 
 詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（英語）を参照してください。今後の計画は [docs/ROADMAP.ja.md](docs/ROADMAP.ja.md)にあります。
 
@@ -138,6 +138,22 @@ open dist/ScreenContext.app
 - `screen-context wipe`（`ERASE` と入力）は、まず資格情報ストアから鍵を削除して暗号化されたファイルをすべて読めなくし、そのあとデータフォルダを削除します。実行前にキャプチャと indexer を終了してください。バックアップはパスフレーズがあれば引き続き復元できます。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
+## 脅威モデル
+
+ScreenContext が防ぐもの：
+
+- **ファイルを持っているが鍵を持っていない人**：盗まれたディスク、コピーされたデータフォルダ、同期されたバックアップ。DB、スプール、プレビューは暗号化されており、`backup` のアーカイブはパスフレーズがないと開けません。
+- **許可した範囲を超えて読む MCP クライアント**：クライアントごとに専用のトークンがあり、初回に本人が承認し、プロファイルの範囲に制限され、失効させることもできます。どのクライアントが何を要求し、何を受け取ったかは監査ログで確認できます（`screen-context audit list`）。
+- **残すべきでない記録**：除外ポリシー、カード番号・マイナンバーの検出、個人情報の組み合わせルール、`purge`。
+
+ScreenContext が防がないもの：
+
+- **同じユーザーで動く他のプログラム**：クライアントの設定ファイルからトークンをコピーして `screen-context serve` を起動したり、資格情報ストアから鍵を読んだりできます。そのため、画面収録の許可がなくても履歴を読めます。署名済みアプリの中に鍵を閉じ込める対策は、Developer ID を採用する場合にのみ予定しています（[ロードマップ](docs/ROADMAP.ja.md)）。
+- **PC の管理者**：管理設定は事故や規程違反を防ぐためのもので、DRM ではありません。
+- **画面に表示された指示**（プロンプトインジェクション）：結果には untrusted の印を付けますが、クライアント側でデータとして扱う必要があります。
+- **暗号化ストアの外にあるコピー**：出力したファイルや、すでにクライアントに返した結果には、後からの除外・削除・保持期間は及びません。そうしたコピーがある場合は、`purge` が知らせます。
+- **OCR やルールの取りこぼし**：検出はパターンによるものです。OCR が読み誤ったカード番号や、ラベルのない氏名は保存されます。
+
 ## 設定
 
 | 環境変数 | 用途 |
@@ -173,7 +189,8 @@ screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT
 screen-context pii-check FILE           テキストがどの機微入力ルールに該当するか
 screen-context pii-scan [--apply]       過去の記録にルールを適用する
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
-screen-context export DATE | push DATE
+screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context push DATE                1日分をローカルの OpenViking サーバーへ送る
 ```
 
 ### 任意機能: 日記の素材と定期提案
@@ -181,9 +198,13 @@ screen-context export DATE | push DATE
 - `diary-material DATE` は 1 日分の画面履歴を、文字数上限つきの Markdown にまとめて出力します。日記や日報のプロンプトの入力に使います。
 - `proposal prepare` はスケジューラー（cron やエージェントフレームワーク）の事前スクリプトとして使う想定です。新しい観測があるときだけ素材を出力し、ないときは最終行に `{"wakeAgent": false, ...}` を出力するので、エージェントの起動を省略できます。エージェントは `submit_proposal` で提案を登録します。根拠はアシスタント以外の画面からの引用である必要があり、同じ結論は 24 時間抑制されます。`proposal finish --run-id ID --response-file FILE` で実行を閉じます。
 
-### 任意機能: OpenViking への出力
+### 出力
 
-`export DATE` は日次集約の JSON を `exports/` に平文で出力します。`push DATE` はそれをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。出力済みのデータは、後から除外を追加しても取り消されません。
+`export --from 2026-09-01 --to 2026-10-01 --format md` は、期間内のフレームを1つの平文ファイルとして `exports/`（または `--out` で指定した場所）に出力します。形式は `jsonl`、`md`、`csv` のいずれかです。`viking` を指定すると、1日ごとの日次集約 JSON を出力します。現在のポリシーを適用します。IDE とターミナルの画面は、`--exclude-ide` を付けない限り含めます。既存のファイルは上書きしません。出力のたびに、含めたフレームの ID を監査記録に残すので、後でそのフレームを `purge` するときに「コピーが外にある」と警告が出ます。管理者は出力を禁止できます（`export_allowed`）。`export DATE` は1リリースの間だけ使えますが、非推奨です。
+
+### 任意機能: OpenViking
+
+`push DATE` は1日分の日次集約を出力し、それをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。出力済みのデータは、後から除外を追加しても取り消されません。
 
 ## Windows（ベータ版）
 

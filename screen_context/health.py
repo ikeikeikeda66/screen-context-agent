@@ -44,14 +44,17 @@ def health(settings, now=None):
     queued = list((root / "spool").glob("*.frame"))
     oldest = min((p.stat().st_mtime for p in queued), default=None)
     locked, idle = session_state()
-    last_seq, last_indexed_at, last_frame_ts = 0, None, None
+    last_seq, last_indexed_at, last_frame_ts, version = 0, None, None, None
     if settings.db.exists():
-        with store.connect(settings, readonly=True) as con:
-            if con.execute("PRAGMA user_version").fetchone()[0] >= 2:
+        # migrating=True skips the schema guard: health must describe an outdated database
+        # (right after an upgrade, before init) instead of failing on it.
+        with store.connect(settings, readonly=True, migrating=True) as con:
+            version = con.execute("PRAGMA user_version").fetchone()[0]
+            if version == store.SCHEMA_VERSION:
                 row = con.execute("SELECT seq, indexed_at FROM indexed_events ORDER BY seq DESC LIMIT 1").fetchone()
                 if row: last_seq, last_indexed_at = row[0], row[1]
-            row = con.execute("SELECT max(ts) FROM frames").fetchone()
-            last_frame_ts = row[0] if row else None
+                row = con.execute("SELECT max(ts) FROM frames").fetchone()
+                last_frame_ts = row[0] if row else None
     result = {
         "ts": now,
         "paused": (root / "paused").exists(),
@@ -63,6 +66,7 @@ def health(settings, now=None):
         "session": {"locked": locked, "idle_seconds": None if idle is None else round(idle)},
         "index": {"last_seq": last_seq, "last_indexed_at": last_indexed_at, "last_frame_ts": last_frame_ts},
         "schema_version": store.SCHEMA_VERSION,
+        "database_schema": version,
     }
     result["permission"] = "denied" if result["capture"]["error_type"] == "PermissionError" else "unknown"
     result["state"] = derive_state(result)
@@ -70,6 +74,8 @@ def health(settings, now=None):
 
 
 def derive_state(h):
+    # An outdated database (upgrade without `init`) blocks every reader and writer, so it comes first.
+    if h.get("database_schema") not in (None, 0, h.get("schema_version")): return "needs_init"
     if h["paused"]: return "paused"
     if not h["capture"]["running"]: return "capture_stopped"
     if h["permission"] == "denied": return "permission_error"
@@ -81,4 +87,4 @@ def derive_state(h):
 
 
 # States in which observations must not be treated as the user's current work.
-NOT_CURRENT = {"paused", "capture_stopped", "permission_error", "locked", "indexer_stopped"}
+NOT_CURRENT = {"needs_init", "paused", "capture_stopped", "permission_error", "locked", "indexer_stopped"}

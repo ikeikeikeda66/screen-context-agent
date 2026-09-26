@@ -1,5 +1,6 @@
 """Wipe, backup and restore, with the encrypted database and a fake OS credential store."""
 import json
+import os
 import subprocess
 import sys
 import types
@@ -122,7 +123,9 @@ def test_unsafe_archive_paths_are_refused(tmp_path, keyring):
 
 def test_cli_wipe_needs_erase_and_backup_uses_a_passphrase_file(tmp_path):
     key = "ab" * 32
-    env = {"SCREEN_CONTEXT_HOME": str(tmp_path / "data"), "SCREEN_CONTEXT_KEY": key, "PATH": "/usr/bin:/bin"}
+    # SystemRoot is required on Windows for SQLCipher's OpenSSL RNG to initialize.
+    env = {"SCREEN_CONTEXT_HOME": str(tmp_path / "data"), "SCREEN_CONTEXT_KEY": key, "PATH": "/usr/bin:/bin",
+           "SystemRoot": os.environ.get("SystemRoot", "")}
     cli = lambda *a, **k: subprocess.run([sys.executable, "-m", "screen_context.cli", *a], env={**env, **k}, capture_output=True, text=True, input="no\n")
     assert cli("init").returncode == 0
     secret = tmp_path / "pass.txt"; secret.write_text(PASSPHRASE + "\n")

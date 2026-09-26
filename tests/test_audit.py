@@ -50,7 +50,7 @@ def test_cli_audit_list_and_export_is_itself_audited(settings):
     add(settings, "配信API仕様")
     Service(settings, client="cursor").search_screen_history("配信API")
     env = {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin"}
-    run = lambda *a: subprocess.run([sys.executable, "-m", "screen_context.cli", "audit", *a], env=env, capture_output=True, text=True, check=True).stdout
+    run = lambda *a: subprocess.run([sys.executable, "-m", "screen_context.cli", "audit", *a], env=env, capture_output=True, text=True, encoding="utf-8", check=True).stdout
     listed = json.loads(run("list", "--client", "cursor"))
     assert [e["query"] for e in listed] == ["配信API"]
     exported = [json.loads(line) for line in run("export").splitlines()]

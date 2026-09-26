@@ -19,7 +19,7 @@ Three processes, each with a narrow job:
 
 1. **Capture** (menu bar app on macOS, control window on Windows) captures only the foreground window at native resolution. Similar frames are skipped with a perceptual hash. Frames go to an encrypted spool.
 2. **Indexer** runs OCR (Apple Vision on macOS, `Windows.Media.Ocr` on Windows), applies your exclusion policy, and stores text in an SQLCipher database with a trigram FTS5 index.
-3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, only reads the database, and labels every result as untrusted observed data.
+3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, reads screen data only (it writes nothing but audit rows and proposals), requires a per-client token, and labels every result as untrusted observed data.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -138,6 +138,22 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 - `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
 
+## Threat model
+
+ScreenContext protects against:
+
+- **Someone who has the files but not the key**: a stolen disk, a copied data folder, a synced backup. The database, spool and previews are encrypted, and `backup` archives need their passphrase.
+- **An MCP client reading more than you allowed**: each client has its own token, is approved once by you, is limited to its profile, and can be revoked. The audit log shows what each client asked for and received (`screen-context audit list`).
+- **Recording what should never be kept**: exclusions, the card-number and My Number detectors, the personal-data combination rule, and `purge`.
+
+It does **not** protect against:
+
+- **Other programs running as your user.** They can start `screen-context serve` with a token copied from a client's configuration file, or read the key from the credential store, and so read your history without Screen Recording permission. Keeping the key inside a signed app is planned only if a Developer ID is adopted ([roadmap](docs/ROADMAP.md)).
+- **A local administrator.** Managed settings prevent mistakes and policy violations; they are not DRM.
+- **Instructions shown on screen** (prompt injection). Results are labeled untrusted; clients must treat them as data.
+- **Copies outside the store.** Exports and results already returned to a client are not reached by later exclusions, purges or retention. `purge` tells you when such copies exist.
+- **What OCR or the rules miss.** Detectors are pattern based: a misread card number or an unlabeled name is stored.
+
 ## Configuration
 
 | Environment variable | Purpose |
@@ -173,7 +189,8 @@ screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT
 screen-context pii-check FILE           which sensitive-input rules a text would trigger
 screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
-screen-context export DATE | push DATE
+screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context push DATE                send one day to a local OpenViking server
 ```
 
 ### Optional: diary material and periodic proposals
@@ -181,9 +198,13 @@ screen-context export DATE | push DATE
 - `diary-material DATE` prints a compact, bounded Markdown summary of one day, for use as input to a diary or daily report prompt.
 - `proposal prepare` is designed as a pre-run script for a scheduler (cron or an agent framework). It prints material only when there are new observations. Otherwise its last line is `{"wakeAgent": false, ...}`, so the scheduler can skip starting the agent. The agent registers a suggestion with `submit_proposal`; evidence must be a quote from a non-assistant frame, and the same conclusion is suppressed for 24 hours. Close the run with `proposal finish --run-id ID --response-file FILE`.
 
-### Optional: OpenViking export
+### Export
 
-`export DATE` writes a daily rollup JSON to `exports/` (plaintext). `push DATE` sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
+`export --from 2026-09-01 --to 2026-10-01 --format md` writes the frames of a time range to one plaintext file in `exports/` (or `--out`): `jsonl`, `md` or `csv`, or `viking` for one rollup JSON per day. The current policy applies, IDE and terminal windows are included unless you pass `--exclude-ide`, and an existing file is never overwritten. Each export is audited with the IDs of the frames it contained, so a later `purge` of those frames warns that a copy exists. An administrator can disable exports (`export_allowed`). `export DATE` still works for one release but is deprecated.
+
+### Optional: OpenViking
+
+`push DATE` exports one day's rollup and sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
 
 ## Windows (beta)
 
