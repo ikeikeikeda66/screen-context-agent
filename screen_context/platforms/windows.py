@@ -121,7 +121,7 @@ def recognize(image):
     async def perform():
         from winrt.windows.media.ocr import OcrEngine
         from winrt.windows.globalization import Language
-        from winrt.windows.graphics.imaging import SoftwareBitmap, BitmapPixelFormat, BitmapAlphaMode
+        from winrt.windows.graphics.imaging import SoftwareBitmap, BitmapPixelFormat
         from winrt.windows.storage.streams import DataWriter
         engine = OcrEngine.try_create_from_language(Language(requested)) if requested else OcrEngine.try_create_from_user_profile_languages()
         if engine is None: raise RuntimeError("No Windows OCR engine for the requested language; install its OCR capability in Windows Settings")
@@ -134,7 +134,7 @@ def recognize(image):
                 if max(tile.size) > OcrEngine.max_image_dimension: raise RuntimeError("OCR image size limit too small")
                 writer = DataWriter()
                 writer.write_bytes(tile.convert("RGBA").tobytes("raw", "BGRA"))
-                bitmap = SoftwareBitmap.create_copy_from_buffer(writer.detach_buffer(), BitmapPixelFormat.BGRA8, tile.width, tile.height, BitmapAlphaMode.IGNORE)
+                bitmap = SoftwareBitmap.create_copy_from_buffer(writer.detach_buffer(), BitmapPixelFormat.BGRA8, tile.width, tile.height)
                 try:
                     result = await engine.recognize_async(bitmap)
                     for line in result.lines:
