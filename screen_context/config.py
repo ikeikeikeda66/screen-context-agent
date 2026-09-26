@@ -38,8 +38,9 @@ class Settings:
 
     @classmethod
     def environment(cls):
-        default = Path.home() / ("Library/Application Support/ScreenContext" if sys.platform == "darwin" else ".screen-context")
-        return cls(Path(os.environ.get("SCREEN_CONTEXT_HOME", default)).expanduser().resolve(), os.environ.get("SCREEN_CONTEXT_PLAINTEXT") == "1")
+        home = os.environ.get("SCREEN_CONTEXT_HOME")
+        root = Path(home) if home else Path.home() / ("Library/Application Support/ScreenContext" if sys.platform == "darwin" else ".screen-context")
+        return cls(root.expanduser().resolve(), os.environ.get("SCREEN_CONTEXT_PLAINTEXT") == "1")
 
     @property
     def db(self): return self.root / "history.db"
