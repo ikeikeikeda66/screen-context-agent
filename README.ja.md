@@ -132,6 +132,7 @@ open dist/ScreenContext.app
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
 - 90 日経過したプレビュー画像と OCR の座標情報を削除します。検索用の OCR テキストと日次集約は保持します。
+- `screen-context purge` は記録を完全に削除します。対象は、期間（`--from`/`--to` または `--last 15m`）、`--app`、`--keyword`、`--block`（1つの活動ブロック）、`--excluded`（現在のポリシーで既に隠れているもの）で指定し、組み合わせることもできます。`--yes` を付けない場合は削除対象を表示するだけです。その際、どのクライアントに渡したか、どの出力に含めたかもあわせて表示します。`--yes` を付けると、プレビュー画像、期間内の未処理のスプール、日次集約の中の写し、そのフレームを引用した提案の根拠、それを返した監査記録の検索語とフレーム ID もまとめて削除します。解放された DB のページは上書きします。取り消しはできません。すでに PC の外に出たデータは取り戻せません。
 - 監査ログは暗号化 DB 内のテーブルです。ツールの呼び出しごとに、クライアント、時刻、ツール、検索語、その他の引数、返却したフレームの ID を記録するので、どのクライアントが何を読んだかを確認できます。MCP では公開しません。`screen-context audit list` または `audit export`（平文の JSON Lines。出力したこと自体も記録されます）で確認します。`init` は旧形式の `audit.jsonl` を取り込んでから削除します。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
@@ -162,6 +163,7 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context pii-check FILE           テキストがどの機微入力ルールに該当するか
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE

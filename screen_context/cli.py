@@ -30,6 +30,12 @@ def main():
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    purge = sub.add_parser("purge", help="Delete frames and everything derived from them (no undo)")
+    purge.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    purge.add_argument("--to", dest="until", help="local time, exclusive"); purge.add_argument("--last", help="for example 15m, 2h, 1d")
+    purge.add_argument("--app", help="bundle ID or process name"); purge.add_argument("--keyword"); purge.add_argument("--block", help="activity block ID")
+    purge.add_argument("--excluded", action="store_true", help="frames the current policy excludes (hidden until now)")
+    purge.add_argument("--yes", action="store_true", help="delete; without it, only show what would be deleted")
     check = sub.add_parser("pii-check", help="Show which sensitive-input rules a text file would trigger")
     check.add_argument("file")
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
@@ -68,6 +74,25 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "purge":
+        import time
+        from datetime import datetime
+        from . import purge
+        try:
+            since = datetime.fromisoformat(args.since).timestamp() if args.since else None
+            until = datetime.fromisoformat(args.until).timestamp() if args.until else None
+            if args.last: since = max(since or 0, time.time() - purge.duration(args.last))
+            selector = {"since": since, "until": until, "app": args.app, "keyword": args.keyword, "block": args.block, "excluded": args.excluded}
+            ids = purge.select(settings, **selector)
+        except ValueError as error: parser.error(str(error))
+        # Frames not yet OCRed match only on time and app; content selectors cannot see them.
+        content = args.keyword or args.block or args.excluded
+        spool_files = [] if content or (since is None and until is None) else purge.spooled(settings, since, until, args.app)
+        if not args.yes:
+            result = {**purge.plan(settings, ids, spool_files), "deleted": False,
+                      "next": "Run again with --yes to delete. This cannot be undone."}
+        elif not ids and not spool_files: result = {"frames": 0, "deleted": False}
+        else: result = {**purge.execute(settings, ids, selector, spool_files), "deleted": True}
     elif args.command == "pii-check":
         from pathlib import Path
         from .config import DEFAULT_POLICY
