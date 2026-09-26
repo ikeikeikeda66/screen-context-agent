@@ -21,7 +21,7 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 2. **indexer**: OCR（macOS は Apple Vision、Windows は `Windows.Media.Ocr`）を実行し、除外ポリシーを適用して、SQLCipher のデータベースとトライグラム FTS5 索引に保存します。
 3. **MCP サーバー**（`screen-context serve`）: MCP クライアントが起動します。撮影コードを読み込まず、データベースを読むだけです。すべての結果に「信頼できない観測データ」のラベルを付けます。
 
-詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（英語）を参照してください。
+詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（英語）を参照してください。今後の計画は [docs/ROADMAP.ja.md](docs/ROADMAP.ja.md)にあります。
 
 ## 必要なもの
 
