@@ -19,7 +19,7 @@ Three processes, each with a narrow job:
 
 1. **Capture** (menu bar app on macOS, control window on Windows) captures only the foreground window at native resolution. Similar frames are skipped with a perceptual hash. Frames go to an encrypted spool.
 2. **Indexer** runs OCR (Apple Vision on macOS, `Windows.Media.Ocr` on Windows), applies your exclusion policy, and stores text in an SQLCipher database with a trigram FTS5 index.
-3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, only reads the database, and labels every result as untrusted observed data.
+3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, reads screen data only (it writes nothing but audit rows and proposals), requires a per-client token, and labels every result as untrusted observed data.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -137,6 +137,22 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 - `screen-context backup FILE` writes one archive: a consistent database snapshot, previews and settings, all still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `screen-context restore FILE` asks for the passphrase before writing anything, refuses to overwrite an existing history without `--replace`, and puts the key into the credential store. Use it to move to another machine. Keep the passphrase: without it the archive cannot be opened.
 - `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
+
+## Threat model
+
+ScreenContext protects against:
+
+- **Someone who has the files but not the key**: a stolen disk, a copied data folder, a synced backup. The database, spool and previews are encrypted, and `backup` archives need their passphrase.
+- **An MCP client reading more than you allowed**: each client has its own token, is approved once by you, is limited to its profile, and can be revoked. The audit log shows what each client asked for and received (`screen-context audit list`).
+- **Recording what should never be kept**: exclusions, the card-number and My Number detectors, the personal-data combination rule, and `purge`.
+
+It does **not** protect against:
+
+- **Other programs running as your user.** They can start `screen-context serve` with a token copied from a client's configuration file, or read the key from the credential store, and so read your history without Screen Recording permission. Keeping the key inside a signed app is planned only if a Developer ID is adopted ([roadmap](docs/ROADMAP.md)).
+- **A local administrator.** Managed settings prevent mistakes and policy violations; they are not DRM.
+- **Instructions shown on screen** (prompt injection). Results are labeled untrusted; clients must treat them as data.
+- **Copies outside the store.** Exports and results already returned to a client are not reached by later exclusions, purges or retention. `purge` tells you when such copies exist.
+- **What OCR or the rules miss.** Detectors are pattern based: a misread card number or an unlabeled name is stored.
 
 ## Configuration
 

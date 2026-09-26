@@ -48,6 +48,7 @@ The schema version is stored in `PRAGMA user_version` (currently 3). Writers ref
 
 ## Privacy model
 
+- Two paths reach the data. The **agent path** (the MCP server) reads screen data only; it writes audit rows and proposals, needs a per-client token, and never sees the audit log. The **user path** (the CLI now, the Today view later) may also write: purge, retention, `pii-scan`, export, backup, restore, wipe, client approval and revocation. Every user-path write is audited.
 - Exclusions (`policy.json`) are applied at capture, after OCR, and again on every read. Changing the policy therefore hides old data from every tool without rewriting the database.
 - Domain exclusions depend on the URL being visible in the OCR text. They are not a complete block.
 - Hiding and deleting are separate. A policy change hides; `purge` (`purge.py`) deletes. It cascades to the FTS entry, preview, OCR-completion event, unindexed spool files, rollups, proposal evidence, and the query text and frame IDs of audit rows. It runs with `secure_delete`, then FTS `optimize` and a WAL checkpoint, so the deleted text does not stay in free pages. The purge itself is audited with a hash of the selector, never the keyword.
