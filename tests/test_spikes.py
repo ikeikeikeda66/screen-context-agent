@@ -1,6 +1,7 @@
 """Phase 0 probes stay importable anywhere and refuse to run off their platform."""
 import importlib.util
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -34,5 +35,6 @@ def test_probe_refuses_other_platforms(relative):
         load(relative).main([])
 
 
+@pytest.mark.skipif(shutil.which("sh") is None, reason="requires a POSIX shell to syntax-check the macOS-only script")
 def test_signing_script_parses():
     subprocess.run(["sh", "-n", str(ROOT / "macos" / "signing_spike.sh")], check=True)
