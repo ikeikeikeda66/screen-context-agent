@@ -30,6 +30,12 @@ def main():
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    wipe = sub.add_parser("wipe", help="Delete the key, then the whole data folder (no undo)")
+    wipe.add_argument("--confirm", help="type ERASE to skip the prompt")
+    for cmd in ("backup", "restore"):
+        p = sub.add_parser(cmd, help="Encrypted archive protected by a passphrase" if cmd == "backup" else "Restore an archive made by backup")
+        p.add_argument("file"); p.add_argument("--passphrase-file", help="read the passphrase from this file (for scripts)")
+        if cmd == "restore": p.add_argument("--replace", action="store_true", help="overwrite the existing history")
     sub.add_parser("usage", help="Disk space by kind of data, and the retention periods")
     keep = sub.add_parser("retention", help="Show or set how long data is kept (days, or none for forever)")
     for flag in ("preview", "text", "audit"): keep.add_argument("--" + flag, metavar="DAYS|none")
@@ -79,6 +85,24 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "wipe":
+        from . import lifecycle
+        answer = args.confirm or input(f"This deletes the encryption key and everything in {settings.root}. Type ERASE to continue: ")
+        if answer != "ERASE": parser.error("not confirmed; nothing was deleted")
+        try: result = lifecycle.wipe(settings)
+        except (RuntimeError, FileNotFoundError) as error: parser.error(str(error))
+    elif args.command in ("backup", "restore"):
+        from pathlib import Path
+        from getpass import getpass
+        from . import lifecycle
+        if args.passphrase_file: passphrase = Path(args.passphrase_file).read_text(encoding="utf-8").rstrip("\r\n")
+        else:
+            passphrase = getpass("Backup passphrase: ")
+            if args.command == "backup" and getpass("Repeat the passphrase: ") != passphrase: parser.error("passphrases differ")
+        try:
+            result = lifecycle.backup(settings, args.file, passphrase) if args.command == "backup" else \
+                lifecycle.restore(settings, args.file, passphrase, args.replace)
+        except (ValueError, PermissionError, FileExistsError, RuntimeError) as error: parser.error(str(error))
     elif args.command == "usage":
         from .storage import usage
         result = usage(settings)

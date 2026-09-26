@@ -129,6 +129,17 @@ def initialize(settings):
     return versions
 
 
+def snapshot(settings, path):
+    """Consistent copy of the database while writers may be running, encrypted with the same key."""
+    with connect(settings, readonly=True) as source:
+        driver = sqlite3 if settings.plaintext else __import__("sqlcipher3.dbapi2", fromlist=["dbapi2"])
+        target = driver.connect(str(path))
+        try:
+            if not settings.plaintext: target.execute('PRAGMA key = "x\'' + get_key(settings).hex() + '\'"')
+            source.backup(target)
+        finally: target.close()
+
+
 def count_skip(con, day, category):
     """Count a frame that was not stored, by reason only."""
     con.execute("INSERT INTO skip_counts (day, category, count) VALUES (?, ?, 1) "

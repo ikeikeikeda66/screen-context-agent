@@ -134,6 +134,8 @@ open dist/ScreenContext.app
 - 保持期間：プレビュー画像と OCR の座標情報は 90 日で削除します。検索用の OCR テキスト、日次集約、監査ログは、期限を設定しない限り保持します。`screen-context retention --preview 30 --text 365 --audit 365` で日数を設定し（`none` は無期限）、1時間ごとのメンテナンスで適用します。期限切れのテキストは `purge` と同じ連鎖削除で消します。`screen-context usage` で、プレビュー、データベース、スプール、出力ファイルが使っている容量を確認できます。
 - `screen-context purge` は記録を完全に削除します。対象は、期間（`--from`/`--to` または `--last 15m`）、`--app`、`--keyword`、`--block`（1つの活動ブロック）、`--excluded`（現在のポリシーで既に隠れているもの）で指定し、組み合わせることもできます。`--yes` を付けない場合は削除対象を表示するだけです。その際、どのクライアントに渡したか、どの出力に含めたかもあわせて表示します。`--yes` を付けると、プレビュー画像、期間内の未処理のスプール、日次集約の中の写し、そのフレームを引用した提案の根拠、それを返した監査記録の検索語とフレーム ID もまとめて削除します。解放された DB のページは上書きします。取り消しはできません。すでに PC の外に出たデータは取り戻せません。
 - 監査ログは暗号化 DB 内のテーブルです。ツールの呼び出しごとに、クライアント、時刻、ツール、検索語、その他の引数、返却したフレームの ID を記録するので、どのクライアントが何を読んだかを確認できます。MCP では公開しません。`screen-context audit list` または `audit export`（平文の JSON Lines。出力したこと自体も記録されます）で確認します。`init` は旧形式の `audit.jsonl` を取り込んでから削除します。
+- `screen-context backup FILE` は1つのアーカイブを作ります。中身は DB の一貫したスナップショット、プレビュー画像、設定で、いずれも暗号化されたままです。データの鍵は、パスフレーズから導出した鍵（scrypt、AES-GCM）で包んで同梱します。`screen-context restore FILE` は、何かを書き込む前にパスフレーズを確認します。既存の履歴は `--replace` を付けない限り上書きせず、鍵は資格情報ストアに登録します。別の PC への移行に使えます。パスフレーズを失うとアーカイブは開けません。
+- `screen-context wipe`（`ERASE` と入力）は、まず資格情報ストアから鍵を削除して暗号化されたファイルをすべて読めなくし、そのあとデータフォルダを削除します。実行前にキャプチャと indexer を終了してください。バックアップはパスフレーズがあれば引き続き復元できます。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
 ## 設定
@@ -163,6 +165,8 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context backup FILE | restore FILE [--replace]   パスフレーズで保護したアーカイブ
+screen-context wipe                     鍵を削除してから全データを削除（取り消し不可）
 screen-context usage                    データ種別ごとの使用容量
 screen-context retention [--preview D] [--text D] [--audit D]   保持日数（none で無期限）
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]

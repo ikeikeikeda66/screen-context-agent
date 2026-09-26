@@ -134,6 +134,8 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 - Retention: preview images and OCR bounding boxes are deleted after 90 days; searchable OCR text, daily rollups and the audit log are kept until you set a limit. `screen-context retention --preview 30 --text 365 --audit 365` sets the days (`none` keeps forever), and the hourly maintenance applies them. Expired text is deleted with the same cascade as `purge`. `screen-context usage` shows the space used by previews, the database, the spool and exports.
 - `screen-context purge` deletes frames for good: by time (`--from`/`--to`, or `--last 15m`), `--app`, `--keyword`, one `--block`, or `--excluded` (everything the current policy already hides). Selectors combine. Without `--yes` it only reports what would go, including which clients already received those frames and which of your exports included them. With `--yes` it also deletes the previews, unindexed spool files in the time range, the rollups' copies, proposal evidence that quoted the frames, and the query text and frame IDs in audit rows that returned them. Freed database pages are overwritten. There is no undo. Frames that already left the machine cannot be recalled.
 - The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
+- `screen-context backup FILE` writes one archive: a consistent database snapshot, previews and settings, all still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `screen-context restore FILE` asks for the passphrase before writing anything, refuses to overwrite an existing history without `--replace`, and puts the key into the credential store. Use it to move to another machine. Keep the passphrase: without it the archive cannot be opened.
+- `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
 
 ## Configuration
@@ -163,6 +165,8 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
+screen-context wipe                     delete the key, then all data (no undo)
 screen-context usage                    disk space by kind of data
 screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]

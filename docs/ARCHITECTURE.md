@@ -38,6 +38,8 @@ The capture and indexer processes coordinate with lock files (`capture.lock`, `i
 | Clients, skip counts | Per-client token hashes; counts of frames not stored, by reason (no content) | Kept |
 | Consumers, runs, outbox | Cursor, lease and proposal history for the periodic proposal runner | Kept |
 
+Whole-folder operations (`lifecycle.py`) hold both worker locks, so capture and indexing cannot run meanwhile. `wipe` deletes the key before the files (crypto-erase). `backup` stores the SQLCipher backup-API snapshot, the sealed previews and the settings, plus the data key sealed with a passphrase-derived key (scrypt n=2^15, r=8, p=1; AES-GCM). `restore` checks the passphrase and the archive paths before writing anything, then runs `init` to migrate an older schema.
+
 Retention periods are capture options (`screen-context retention`), resolved like other settings, so an administrator can set them. The hourly `maintain` applies them.
 
 The schema version is stored in `PRAGMA user_version` (currently 3). Writers refuse a database with a different version. `screen-context init` migrates older databases; back up `history.db` first.
