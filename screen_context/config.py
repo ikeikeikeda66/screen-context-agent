@@ -20,6 +20,8 @@ DEFAULT_POLICY = {
     "sensitive_apps": ["com.apple.AddressBook"],
     "sensitive_title_patterns": [r"(?i)\bcheckout\b|payment details|billing information|お支払い(方法|手続き|情報)|ご注文手続き|レジに進む"],
     "sensitive_url_patterns": [r"(?i)/(checkout|payment|billing)(?:[/?#]|$)"],
+    # Signals within 5 OCR lines of each other ("name+phone:3" sets another window). See pii.py.
+    "pii_combinations": ["name+address", "name+phone", "name+dob", "name+email"],
     "ide_apps": ["com.microsoft.VSCode", "com.apple.Terminal", "com.googlecode.iterm2", "com.jetbrains.pycharm", "com.jetbrains.intellij", "com.todesktop.230313mzl4w4u92", "com.openai.codex", "Code.exe", "WindowsTerminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "idea64.exe", "pycharm64.exe", "Cursor.exe"],
 }
 
@@ -105,6 +107,8 @@ class Settings:
                 raise ValueError(f"Invalid policy: {key}")
         for key in ("denied_title_patterns", "sensitive_title_patterns", "sensitive_url_patterns"):
             for pattern in result[key]: re.compile(pattern)
+        from .pii import parse
         from .sensitive import DETECTORS
+        parse(result["pii_combinations"])
         if set(result["sensitive_detectors"]) - set(DETECTORS): raise ValueError("Invalid policy: sensitive_detectors")
         return result, origin

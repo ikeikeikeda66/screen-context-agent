@@ -30,6 +30,8 @@ def main():
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    check = sub.add_parser("pii-check", help="Show which sensitive-input rules a text file would trigger")
+    check.add_argument("file")
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
     audit.add_argument("action", choices=["list", "export"]); audit.add_argument("--client")
     audit.add_argument("--since", help="YYYY-MM-DD, local time"); audit.add_argument("--limit", type=int, default=100)
@@ -66,6 +68,18 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "pii-check":
+        from pathlib import Path
+        from .config import DEFAULT_POLICY
+        from .pii import scan
+        from .sensitive import detect
+        try: policy = settings.policy()
+        except FileNotFoundError: policy = DEFAULT_POLICY  # works before init, with the defaults
+        text = Path(args.file).read_text(encoding="utf-8")
+        lines = text.splitlines()
+        indexes, combinations = scan(lines, policy["pii_combinations"])
+        result = {"drop_frame": detect(text, policy["sensitive_detectors"]), "combinations": combinations,
+                  "redacted_lines": [{"line": i + 1, "text": lines[i]} for i in sorted(indexes)]}
     elif args.command == "audit":
         from datetime import datetime
         from . import audit

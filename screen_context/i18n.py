@@ -39,6 +39,7 @@ MESSAGES = {
                         "with: screen-context clients revoke {name}"),
         "client.deny": "Don't Allow",
         "client.allow": "Allow",
+        "pii.redacted": "[personal data]",
         # Worker status lines
         "status.none": "No results recorded",
         "status.spooled": "Image saved",
@@ -126,6 +127,7 @@ MESSAGES = {
                         "取り消すには次を実行します：screen-context clients revoke {name}"),
         "client.deny": "許可しない",
         "client.allow": "許可",
+        "pii.redacted": "[個人情報]",
         "status.none": "処理記録なし",
         "status.spooled": "画像を保存",
         "status.excluded": "除外",
