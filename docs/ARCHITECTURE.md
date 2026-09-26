@@ -23,6 +23,8 @@
 | MCP server | `mcp_server.py`, `service.py`, `access.py` | Fixed profile per process. No capture module is imported. Every tool call needs a per-client token (environment variable for stdio, bearer token for HTTP) whose profile ceiling covers the server; the audit log names the client from the token. |
 | Approval broker | `broker.py` | `get_current_screen` writes a request file; the capture process shows an OS dialog and captures only after "Allow Once". A new client token's first call writes a `.client` request; the capture process (also while paused) asks whether the client may read the history and records the answer in the database, so the MCP server itself never approves anything. |
 
+On Windows the capture loop checks whether the session is locked (the input desktop cannot be opened or switched to) and starts no capture then, because the capture library can crash natively when the lock screen takes over (#47). The Windows control window restarts a worker that exits abnormally, at most 3 times in 10 minutes, and records the restart in `capture-status.json`; after that it stops both workers as before.
+
 The capture and indexer processes coordinate with lock files (`capture.lock`, `indexer.lock`) and status files (`capture-status.json`, `index-status.json`). `health.py` combines them with the session state to tell `paused`, `capture_stopped`, `permission_error`, `locked`, `indexer_stopped`, `indexing_delayed`, `idle` and `active` apart.
 
 ## Data

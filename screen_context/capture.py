@@ -26,6 +26,12 @@ def spool(settings, image, metadata):
     return record
 
 
+def locked(adapter):
+    """Platforms that can tell report a locked session; capture is skipped until it unlocks."""
+    check = getattr(adapter, "session_locked", None)
+    return bool(check and check())
+
+
 def backend():
     import sys
     if sys.platform == "darwin":
@@ -65,6 +71,10 @@ def run(settings, once=False, stop=None):
         if denied(settings.policy(), front):
             previous_identity = None
             if once: return {"status": "excluded"}
+            stop.wait(1); continue
+        if locked(adapter):
+            previous_identity = None
+            if once: return {"status": "locked"}
             stop.wait(1); continue
         try:
             image, meta = adapter.capture(front)

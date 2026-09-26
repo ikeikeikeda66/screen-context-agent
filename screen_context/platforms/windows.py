@@ -16,6 +16,19 @@ class Backend:
         self.user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
         self.user.IsWindow.argtypes = [wintypes.HWND]
         self.user.IsWindow.restype = wintypes.BOOL
+        self.user.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        self.user.OpenInputDesktop.restype = wintypes.HANDLE
+        self.user.SwitchDesktop.argtypes = [wintypes.HANDLE]
+        self.user.CloseDesktop.argtypes = [wintypes.HANDLE]
+
+    def session_locked(self):
+        """True while the lock screen (or another secure desktop) has the input. Windows Graphics
+        Capture must not be started then: on real hardware the capture library crashes the whole
+        process with an access violation that no Python handler can catch (#47)."""
+        desktop = self.user.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+        if not desktop: return True  # the input desktop is not ours: locked or secure
+        try: return not self.user.SwitchDesktop(desktop)
+        finally: self.user.CloseDesktop(desktop)
 
     def window_identity(self, hwnd):
         import psutil

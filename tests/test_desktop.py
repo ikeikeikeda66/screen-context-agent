@@ -20,7 +20,8 @@ class Process:
 
 
 def test_worker_failure_stops_peer_and_prevents_double_start(tmp_path):
-    workers = Workers(Settings(tmp_path), SimpleNamespace(Event=Event, Process=Process))
+    # Without restarts left, a dead worker stops its peer.
+    workers = Workers(Settings(tmp_path), SimpleNamespace(Event=Event, Process=Process), max_restarts=0)
     workers.start()
     with pytest.raises(RuntimeError): workers.start()
     capture = workers.processes["capture"]
