@@ -14,7 +14,8 @@ POLICIES = {"owner": 2, "biometrics": 1}
 BIOMETRY = {0: "none", 1: "touch_id", 2: "face_id", 4: "optic_id"}
 ERRORS = {-1: "authenticationFailed", -2: "userCancel", -3: "userFallback", -4: "systemCancel",
           -5: "passcodeNotSet", -6: "biometryNotAvailable", -7: "biometryNotEnrolled",
-          -8: "biometryLockout", -9: "appCancel", -10: "invalidContext"}
+          -8: "biometryLockout", -9: "appCancel", -10: "invalidContext", -11: "companionNotAvailable",
+          -12: "biometryNotPaired", -13: "biometryDisconnected", -14: "invalidDimensions"}
 
 
 def describe(error):
