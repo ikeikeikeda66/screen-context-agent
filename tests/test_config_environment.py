@@ -1,6 +1,7 @@
 """Settings.environment() must not evaluate Path.home() when SCREEN_CONTEXT_HOME is set.
 On Windows, Path.home() needs USERPROFILE/HOMEDRIVE+HOMEPATH; a minimal subprocess
 environment (as CLI integration tests use) lacks those and Path.home() raises."""
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,4 +24,5 @@ def test_environment_still_falls_back_to_home_when_unset(tmp_path, monkeypatch):
 
     settings = Settings.environment()
 
-    assert settings.root == (tmp_path / ".screen-context").resolve()
+    expected = tmp_path / ("Library/Application Support/ScreenContext" if sys.platform == "darwin" else ".screen-context")
+    assert settings.root == expected.resolve()
