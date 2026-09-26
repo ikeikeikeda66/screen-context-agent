@@ -30,13 +30,15 @@ The capture and indexer processes coordinate with lock files (`capture.lock`, `i
 | Layer | Content | Retention |
 |---|---|---|
 | Spool | AES-GCM encrypted PNG plus metadata | Until indexed; deleted after 24 hours if never indexed |
-| Frames | App, window title, OCR text, domains, OCR bounding boxes, preview path | OCR text kept; bounding boxes and preview image deleted after 90 days |
+| Frames | App, window title, OCR text, domains, OCR bounding boxes, preview path | Bounding boxes and preview image: `preview_retention_days` (default 90). The whole frame: `text_retention_days` (default forever), deleted through the purge cascade |
 | Activity blocks | Consecutive frames of one app with similar text (trigram Jaccard ≥ 0.25, gap ≤ 10 minutes) | Computed at query time |
-| Daily rollups | Compact per-day summary | Kept |
+| Daily rollups | Compact per-day summary | Rebuilt or removed when frames of that day are deleted |
 | Indexed events | Monotonic sequence of OCR completion, for delta consumers | Kept |
-| Audit | Agent path: client, tool, query text, arguments, returned frame IDs. User path: the user's own operations | Kept |
+| Audit | Agent path: client, tool, query text, arguments, returned frame IDs. User path: the user's own operations | `audit_retention_days` (default forever) |
 | Clients, skip counts | Per-client token hashes; counts of frames not stored, by reason (no content) | Kept |
 | Consumers, runs, outbox | Cursor, lease and proposal history for the periodic proposal runner | Kept |
+
+Retention periods are capture options (`screen-context retention`), resolved like other settings, so an administrator can set them. The hourly `maintain` applies them.
 
 The schema version is stored in `PRAGMA user_version` (currently 3). Writers refuse a database with a different version. `screen-context init` migrates older databases; back up `history.db` first.
 

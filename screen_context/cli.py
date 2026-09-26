@@ -30,6 +30,9 @@ def main():
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    sub.add_parser("usage", help="Disk space by kind of data, and the retention periods")
+    keep = sub.add_parser("retention", help="Show or set how long data is kept (days, or none for forever)")
+    for flag in ("preview", "text", "audit"): keep.add_argument("--" + flag, metavar="DAYS|none")
     purge = sub.add_parser("purge", help="Delete frames and everything derived from them (no undo)")
     purge.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     purge.add_argument("--to", dest="until", help="local time, exclusive"); purge.add_argument("--last", help="for example 15m, 2h, 1d")
@@ -76,6 +79,16 @@ def main():
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
             return
+    elif args.command == "usage":
+        from .storage import usage
+        result = usage(settings)
+    elif args.command == "retention":
+        for flag in ("preview", "text", "audit"):
+            value = getattr(args, flag)
+            if value is None: continue
+            try: settings.set_retention(flag + "_retention_days", None if value == "none" else int(value))
+            except (ValueError, PermissionError) as error: parser.error(str(error))
+        result = {name: settings.retention(name) for name in ("preview_retention_days", "text_retention_days", "audit_retention_days")}
     elif args.command == "purge":
         import time
         from datetime import datetime

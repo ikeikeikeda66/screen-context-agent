@@ -25,11 +25,15 @@ DEFAULT_POLICY = {
     "ide_apps": ["com.microsoft.VSCode", "com.apple.Terminal", "com.googlecode.iterm2", "com.jetbrains.pycharm", "com.jetbrains.intellij", "com.todesktop.230313mzl4w4u92", "com.openai.codex", "Code.exe", "WindowsTerminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "idea64.exe", "pycharm64.exe", "Cursor.exe"],
 }
 
+# Days to keep each kind of data; None keeps it forever. Previews (and OCR boxes) expire by
+# default; searchable text and the audit log are kept until the user chooses otherwise.
+RETENTION = {"preview_retention_days": 90, "text_retention_days": None, "audit_retention_days": None}
+
+
 @dataclass(frozen=True)
 class Settings:
     root: Path
     plaintext: bool = False
-    retention_days: int = 90
     managed: object = field(default_factory=resolver.NoManagedSettings, compare=False, repr=False)
 
     @classmethod
@@ -71,6 +75,18 @@ class Settings:
         if type(seconds) is not int or not 5 <= seconds <= 300:
             raise ValueError("Capture interval must be 5–300 seconds")
         self.save_option("interval_seconds", seconds)
+
+    def retention(self, name):
+        value = self.option(name, RETENTION[name])
+        if value is not None and (type(value) is not int or not 1 <= value <= 36500):
+            raise ValueError(f"{name} must be 1–36500 days or null")
+        return value
+
+    def set_retention(self, name, value):
+        if name not in RETENTION: raise ValueError("Unknown retention setting")
+        if value is not None and (type(value) is not int or not 1 <= value <= 36500):
+            raise ValueError("Retention must be 1–36500 days or none")
+        self.save_option(name, value)
 
     def language(self):
         """Saved UI language choice: "system", "en" or "ja"."""

@@ -131,7 +131,7 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
-- After 90 days, preview images and OCR bounding boxes are deleted. Searchable OCR text and daily rollups are kept.
+- Retention: preview images and OCR bounding boxes are deleted after 90 days; searchable OCR text, daily rollups and the audit log are kept until you set a limit. `screen-context retention --preview 30 --text 365 --audit 365` sets the days (`none` keeps forever), and the hourly maintenance applies them. Expired text is deleted with the same cascade as `purge`. `screen-context usage` shows the space used by previews, the database, the spool and exports.
 - `screen-context purge` deletes frames for good: by time (`--from`/`--to`, or `--last 15m`), `--app`, `--keyword`, one `--block`, or `--excluded` (everything the current policy already hides). Selectors combine. Without `--yes` it only reports what would go, including which clients already received those frames and which of your exports included them. With `--yes` it also deletes the previews, unindexed spool files in the time range, the rollups' copies, proposal evidence that quoted the frames, and the query text and frame IDs in audit rows that returned them. Freed database pages are overwritten. There is no undo. Frames that already left the machine cannot be recalled.
 - The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
@@ -163,6 +163,8 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context usage                    disk space by kind of data
+screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context pii-check FILE           which sensitive-input rules a text would trigger
 screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
