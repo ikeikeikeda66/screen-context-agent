@@ -173,7 +173,8 @@ screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT
 screen-context pii-check FILE           which sensitive-input rules a text would trigger
 screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
-screen-context export DATE | push DATE
+screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context push DATE                send one day to a local OpenViking server
 ```
 
 ### Optional: diary material and periodic proposals
@@ -181,9 +182,13 @@ screen-context export DATE | push DATE
 - `diary-material DATE` prints a compact, bounded Markdown summary of one day, for use as input to a diary or daily report prompt.
 - `proposal prepare` is designed as a pre-run script for a scheduler (cron or an agent framework). It prints material only when there are new observations. Otherwise its last line is `{"wakeAgent": false, ...}`, so the scheduler can skip starting the agent. The agent registers a suggestion with `submit_proposal`; evidence must be a quote from a non-assistant frame, and the same conclusion is suppressed for 24 hours. Close the run with `proposal finish --run-id ID --response-file FILE`.
 
-### Optional: OpenViking export
+### Export
 
-`export DATE` writes a daily rollup JSON to `exports/` (plaintext). `push DATE` sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
+`export --from 2026-09-01 --to 2026-10-01 --format md` writes the frames of a time range to one plaintext file in `exports/` (or `--out`): `jsonl`, `md` or `csv`, or `viking` for one rollup JSON per day. The current policy applies, IDE and terminal windows are included unless you pass `--exclude-ide`, and an existing file is never overwritten. Each export is audited with the IDs of the frames it contained, so a later `purge` of those frames warns that a copy exists. An administrator can disable exports (`export_allowed`). `export DATE` still works for one release but is deprecated.
+
+### Optional: OpenViking
+
+`push DATE` exports one day's rollup and sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
 
 ## Windows (beta)
 

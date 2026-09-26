@@ -52,8 +52,14 @@ def main():
     audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
     audit.add_argument("action", choices=["list", "export"]); audit.add_argument("--client")
     audit.add_argument("--since", help="YYYY-MM-DD, local time"); audit.add_argument("--limit", type=int, default=100)
-    for cmd in ("export", "push"):
-        p = sub.add_parser(cmd); p.add_argument("date")
+    export = sub.add_parser("export", help="Plaintext export of a time range (policy applied; audited)")
+    export.add_argument("date", nargs="?", help="deprecated: one day's rollup for OpenViking; use --format viking")
+    export.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    export.add_argument("--to", dest="until", help="local time, exclusive; default now")
+    export.add_argument("--format", choices=["jsonl", "md", "csv", "viking"], default="jsonl")
+    export.add_argument("--out", help="folder; default: exports/ in the data folder")
+    export.add_argument("--exclude-ide", action="store_true", help="leave out IDE and terminal windows")
+    push = sub.add_parser("push", help="Export one day for OpenViking and send it to the local server"); push.add_argument("date")
     args = parser.parse_args()
     settings = Settings.environment()
     stop = threading.Event()
@@ -216,7 +222,20 @@ def main():
         run(settings, args.profile, args.transport, args.port); return
     else:
         from . import viking
-        result = {"path": str(viking.export(settings, args.date))} if args.command == "export" else viking.push(settings, args.date)
+        if args.command == "push": result = viking.push(settings, args.date)
+        elif args.date:
+            print("export DATE is deprecated and will be removed: use export --from DATE --to NEXT_DAY --format viking", file=sys.stderr)
+            result = {"path": str(viking.export(settings, args.date))}
+        else:
+            import time
+            from datetime import datetime
+            from . import export
+            if not args.since: parser.error("export needs --from (or the deprecated DATE)")
+            try:
+                since = datetime.fromisoformat(args.since).timestamp()
+                until = datetime.fromisoformat(args.until).timestamp() if args.until else time.time()
+                result = export.write(settings, since, until, args.format, args.out, args.exclude_ide)
+            except (ValueError, PermissionError, FileExistsError) as error: parser.error(str(error))
     print(json.dumps(result, ensure_ascii=False))
 
 

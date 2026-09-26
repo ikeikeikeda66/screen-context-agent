@@ -173,7 +173,8 @@ screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT
 screen-context pii-check FILE           テキストがどの機微入力ルールに該当するか
 screen-context pii-scan [--apply]       過去の記録にルールを適用する
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
-screen-context export DATE | push DATE
+screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context push DATE                1日分をローカルの OpenViking サーバーへ送る
 ```
 
 ### 任意機能: 日記の素材と定期提案
@@ -181,9 +182,13 @@ screen-context export DATE | push DATE
 - `diary-material DATE` は 1 日分の画面履歴を、文字数上限つきの Markdown にまとめて出力します。日記や日報のプロンプトの入力に使います。
 - `proposal prepare` はスケジューラー（cron やエージェントフレームワーク）の事前スクリプトとして使う想定です。新しい観測があるときだけ素材を出力し、ないときは最終行に `{"wakeAgent": false, ...}` を出力するので、エージェントの起動を省略できます。エージェントは `submit_proposal` で提案を登録します。根拠はアシスタント以外の画面からの引用である必要があり、同じ結論は 24 時間抑制されます。`proposal finish --run-id ID --response-file FILE` で実行を閉じます。
 
-### 任意機能: OpenViking への出力
+### 出力
 
-`export DATE` は日次集約の JSON を `exports/` に平文で出力します。`push DATE` はそれをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。出力済みのデータは、後から除外を追加しても取り消されません。
+`export --from 2026-09-01 --to 2026-10-01 --format md` は、期間内のフレームを1つの平文ファイルとして `exports/`（または `--out` で指定した場所）に出力します。形式は `jsonl`、`md`、`csv` のいずれかです。`viking` を指定すると、1日ごとの日次集約 JSON を出力します。現在のポリシーを適用します。IDE とターミナルの画面は、`--exclude-ide` を付けない限り含めます。既存のファイルは上書きしません。出力のたびに、含めたフレームの ID を監査記録に残すので、後でそのフレームを `purge` するときに「コピーが外にある」と警告が出ます。管理者は出力を禁止できます（`export_allowed`）。`export DATE` は1リリースの間だけ使えますが、非推奨です。
+
+### 任意機能: OpenViking
+
+`push DATE` は1日分の日次集約を出力し、それをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。出力済みのデータは、後から除外を追加しても取り消されません。
 
 ## Windows（ベータ版）
 
