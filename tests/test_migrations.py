@@ -9,7 +9,7 @@ def test_v1_to_v2(tmp_path):
     con.commit(); con.close()
     with pytest.raises(RuntimeError): 
         with store.connect(s) as c: pass
-    assert store.initialize(s) == (1, 2)
+    assert store.initialize(s) == (1, 3)
     with store.connect(s, readonly=True) as c:
         assert [tuple(r) for r in c.execute("SELECT seq, frame_id FROM indexed_events ORDER BY seq")] == [(1,'a'),(2,'b')]
     with store.connect(s) as c:
@@ -17,6 +17,6 @@ def test_v1_to_v2(tmp_path):
         store.insert(c, dict(id='c', ts=3, app_bundle='x', app_name='x', window_title='', display_id='1', dhash='0', ocr_text='t', domains='[]'))
     with store.connect(s, readonly=True) as c:
         assert c.execute("SELECT count(*) FROM indexed_events").fetchone()[0] == 3
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 3
     con = sqlite3.connect(s.db); con.execute("PRAGMA user_version=9"); con.commit(); con.close()
     with pytest.raises(RuntimeError): store.initialize(s)

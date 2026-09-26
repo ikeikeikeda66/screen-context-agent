@@ -13,7 +13,7 @@ Capture and indexing run separately (menu bar app or Windows control window, plu
 screen-context mcp-config --client <name> [--profile standard|full]
 ```
 
-`<name>` is one of `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`, `gemini`, `generic`. The output uses the absolute path of the current installation and sets `SCREEN_CONTEXT_HOME` and `SCREEN_CONTEXT_CLIENT` (the name written to the audit log). The target file is printed to stderr.
+`<name>` is one of `claude-code`, `claude-desktop`, `cursor`, `vscode`, `windsurf`, `codex`, `gemini`, `generic`. The output uses the absolute path of the current installation and sets `SCREEN_CONTEXT_HOME` and `SCREEN_CONTEXT_CLIENT` (the client name recorded in the audit log; see `screen-context audit list`). The target file is printed to stderr.
 
 When you run from a source checkout, the command is `<checkout>/.venv/bin/python -m screen_context.cli`. When you run the command from the built macOS app (`ScreenContext.app/Contents/MacOS/ScreenContext mcp-config ...`), the entry points at the app.
 

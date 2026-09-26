@@ -22,6 +22,9 @@ def main():
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
+    audit = sub.add_parser("audit", help="Show or export what each client read (user path only)")
+    audit.add_argument("action", choices=["list", "export"]); audit.add_argument("--client")
+    audit.add_argument("--since", help="YYYY-MM-DD, local time"); audit.add_argument("--limit", type=int, default=100)
     for cmd in ("export", "push"):
         p = sub.add_parser(cmd); p.add_argument("date")
     args = parser.parse_args()
@@ -54,6 +57,19 @@ def main():
             print(runner.material_markdown(material, resolve(settings)))
             if args.action == "simulate":
                 print("\n[simulate] run closed without delivery:", json.dumps(runner.finish(settings, material["run_id"], "[SILENT]")))
+            return
+    elif args.command == "audit":
+        from datetime import datetime
+        from . import audit
+        try: since = datetime.strptime(args.since, "%Y-%m-%d").timestamp() if args.since else None
+        except ValueError: parser.error("--since must be YYYY-MM-DD")
+        if not 1 <= args.limit <= 100000: parser.error("--limit must be between 1 and 100000")
+        entries = audit.rows(settings, args.client, since, args.limit)
+        if args.action == "list": result = entries
+        else:
+            # Plaintext leaves the encrypted store here, so the export itself is audited.
+            audit.record(settings, "user", "cli", "audit.export", params={"client": args.client, "since": args.since, "limit": args.limit}, count=len(entries))
+            for entry in entries: print(json.dumps(entry, ensure_ascii=False))
             return
     elif args.command == "status":
         result = {"initialized": settings.db.exists(), "paused": (settings.root / "paused").exists(), "queued": len(list((settings.root / "spool").glob("*.frame"))), "encrypted": not settings.plaintext}

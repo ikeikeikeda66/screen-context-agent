@@ -126,7 +126,7 @@ open dist/ScreenContext.app
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
 - 90 日経過したプレビュー画像と OCR の座標情報を削除します。検索用の OCR テキストと日次集約は保持します。
-- `audit.jsonl` にはクライアント、時刻、ツール、引数の SHA-256、返却件数を記録します。検索語そのものは保存しません。
+- 監査ログは暗号化 DB 内のテーブルです。ツールの呼び出しごとに、クライアント、時刻、ツール、検索語、その他の引数、返却したフレームの ID を記録するので、どのクライアントが何を読んだかを確認できます。MCP では公開しません。`screen-context audit list` または `audit export`（平文の JSON Lines。出力したこと自体も記録されます）で確認します。`init` は旧形式の `audit.jsonl` を取り込んでから削除します。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
 
 ## 設定
@@ -156,6 +156,7 @@ screen-context mcp-config [--client NAME] [--profile standard|full]
 screen-context language [system|en|ja]
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
 screen-context proposal prepare|simulate|finish
+screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export DATE | push DATE
 ```
 

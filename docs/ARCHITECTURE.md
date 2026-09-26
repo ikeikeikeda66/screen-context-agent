@@ -4,7 +4,7 @@
 
 - Give AI assistants the context that is on your screen but not in their conversation: documents, web pages, chat, tickets.
 - Keep the data local and encrypted, and make exclusions apply to past data as well as new data.
-- Keep the MCP server read-only and unable to capture the screen by itself.
+- Keep the MCP server read-only for screen data and unable to capture the screen by itself. It writes only audit rows and the proposal outbox.
 
 ## Processes
 
@@ -34,9 +34,11 @@ The capture and indexer processes coordinate with lock files (`capture.lock`, `i
 | Activity blocks | Consecutive frames of one app with similar text (trigram Jaccard ≥ 0.25, gap ≤ 10 minutes) | Computed at query time |
 | Daily rollups | Compact per-day summary | Kept |
 | Indexed events | Monotonic sequence of OCR completion, for delta consumers | Kept |
+| Audit | Agent path: client, tool, query text, arguments, returned frame IDs. User path: the user's own operations | Kept |
+| Clients, skip counts | Per-client token hashes; counts of frames not stored, by reason (no content) | Kept |
 | Consumers, runs, outbox | Cursor, lease and proposal history for the periodic proposal runner | Kept |
 
-The schema version is stored in `PRAGMA user_version` (currently 2). Writers refuse a database with a different version. `screen-context init` migrates older databases; back up `history.db` first.
+The schema version is stored in `PRAGMA user_version` (currently 3). Writers refuse a database with a different version. `screen-context init` migrates older databases; back up `history.db` first.
 
 ## Privacy model
 
@@ -44,7 +46,7 @@ The schema version is stored in `PRAGMA user_version` (currently 2). Writers ref
 - Domain exclusions depend on the URL being visible in the OCR text. They are not a complete block.
 - The `standard` profile also hides IDE and terminal apps.
 - Search queries are passed to FTS5 as quoted literals, so they cannot inject FTS operators. Queries shorter than 3 characters use a substring match.
-- The audit log stores a hash of the arguments, not the query.
+- The audit log stores the query text inside the encrypted database, so the user can see what each client read. It is readable on the user path only (CLI, later the UI), never over MCP.
 - Results are wrapped with `source=observed_screen` and `trust=untrusted`. This labels the data; it does not neutralize prompt injection. Clients must treat screen text as data.
 
 ## Pagination contracts

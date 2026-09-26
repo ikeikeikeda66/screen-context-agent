@@ -1,13 +1,11 @@
 """Every response is filtered with the current policy, before pagination."""
 from datetime import datetime, timedelta
 import base64
-import hashlib
 import hmac
 import json
 import math
-import os
 import time
-from . import store
+from . import audit, store
 from .activity import blocks
 from .privacy import denied, envelope
 from .crypto import get_key, unseal
@@ -62,11 +60,13 @@ class Service:
             return [dict(r) for r in con.execute(sql, args) if not denied(policy, dict(r), self.profile)]
 
     def finish(self, records, tool, arguments):
-        # Queries may themselves contain secrets. Audit a digest and parameter names.
-        log = {"ts": time.time(), "client": self.client, "profile": self.profile, "tool": tool, "query_sha256": hashlib.sha256(json.dumps(arguments, sort_keys=True).encode()).hexdigest(), "count": len(records)}
-        path = self.settings.root / "audit.jsonl"
-        fd = os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f: f.write(json.dumps(log) + "\n")
+        # The query is stored in the encrypted database so the user can see what each client asked
+        # for and received. Auditing fails closed: no audit row, no result.
+        arguments = dict(arguments)
+        query = arguments.pop("query", None)
+        returned = [i for r in records for i in ([r["frame_id"]] if "frame_id" in r else r.get("frame_ids", []))]
+        audit.record(self.settings, "agent", self.client, tool, profile=self.profile, query=query,
+                     params=arguments, frame_ids=returned, count=len(records))
         budget, out = 10000, []
         for rec in records:
             rec = dict(rec)
