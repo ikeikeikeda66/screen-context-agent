@@ -102,3 +102,11 @@ def test_material_and_proposal_follow_language(tmp_path, monkeypatch):
     assert outcome == "ready" and runner.material_markdown(material, "en").startswith("# Screen observations")
     result = runner.submit(settings, "r1", "Review the checklist", "Open it", "release checklist is Friday", [frame["id"]], delivery="mock", now=now)
     assert "Evidence:" in result["message"] and "Next step: Open it" in result["message"]
+
+
+def test_cli_output_is_utf8_even_when_the_console_code_page_is_not(tmp_path):
+    # Frozen Windows builds ignore PYTHONIOENCODING and use the ANSI code page (#44); cp932 reproduces it here.
+    home = tmp_path / "検証 home"
+    env = {"SCREEN_CONTEXT_HOME": str(home), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin", "PYTHONIOENCODING": "cp932"}
+    out = subprocess.run([sys.executable, "-m", "screen_context.cli", "init"], env=env, capture_output=True, check=True).stdout
+    assert json.loads(out.decode("utf-8"))["root"] == str(home)

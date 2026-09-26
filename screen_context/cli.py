@@ -1,12 +1,17 @@
 import argparse
 import json
 import signal
+import sys
 import threading
 from .config import Settings
 from .service import PROFILES, PROFILE_ALIASES
 
 
 def main():
+    # Output is JSON for scripts. Frozen Windows builds ignore PYTHONIOENCODING and would write the
+    # ANSI code page (cp932 on Japanese systems), which UTF-8 readers cannot decode (#44).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"): stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Local screen context capture, index and MCP")
     sub = parser.add_subparsers(dest="command", required=True)
     for cmd in ("init", "status", "pause", "resume", "maintain", "health"): sub.add_parser(cmd)
@@ -103,7 +108,6 @@ def main():
         from .access import issue
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
-        import sys
         if not settings.db.exists(): parser.error("run screen-context init first")
         profile = profile_name(args.profile)
         token = issue(settings, args.name or args.client, profile)

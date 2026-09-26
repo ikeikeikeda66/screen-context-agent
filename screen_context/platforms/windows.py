@@ -53,20 +53,23 @@ class Backend:
         if not self.user.GetLastInputInfo(ctypes.byref(value)): raise ctypes.WinError()
         return ((ctypes.windll.kernel32.GetTickCount() - value.dwTime) & 0xffffffff)/1000
 
+    # MB_YESNO | MB_DEFBUTTON2 (denial is the default) | MB_SETFOREGROUND | MB_TOPMOST. The dialogs come
+    # from a capture worker process that owns no window, so without the last two they can open behind
+    # other windows and only flash in the taskbar while the caller waits.
+    DIALOG = 0x4 | 0x100 | 0x10000 | 0x40000
+
     def approve_current(self):
-        # MB_YESNO | MB_DEFBUTTON2: denial is the default.
         from ..config import Settings
         from ..i18n import resolve, t
         lang = resolve(Settings.environment())
-        return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", 0x104) == 6
+        return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", self.DIALOG) == 6
 
     def approve_client(self, name, profile):
-        # MB_YESNO | MB_DEFBUTTON2: denial is the default.
         from ..config import Settings
         from ..i18n import resolve, t
         lang = resolve(Settings.environment())
         text = t("client.title", lang, name=name) + "\n\n" + t("client.body", lang, name=name, profile=profile)
-        return self.user.MessageBoxW(None, text, "Screen Context", 0x104) == 6
+        return self.user.MessageBoxW(None, text, "Screen Context", self.DIALOG) == 6
 
     def capture(self, front):
         from windows_capture import WindowsCapture
