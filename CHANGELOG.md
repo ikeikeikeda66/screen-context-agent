@@ -8,6 +8,7 @@
 - **Database schema v4** (presence and feedback tables): run `screen-context init` after updating. Until then, `health` reports `needs_init`.
 - Control tabs in the UI: Data (storage, not-recorded counts, retention, delete, exclude), Access log, Clients (revoke). Each runs the same code as its CLI command (#30).
 - `screen-context exclude --app | --domain [--delete-past]`; `usage` reports the not-recorded counts.
+- macOS menu bar: "Open Today…" and "Delete Recent" (last 5 min, 15 min or hour), through the same purge path as `purge --last` (#31).
 - Purge warnings no longer count your own page views in the UI as copies; the UI's copy button still counts.
 - Fixed: `retention --preview none` made hourly maintenance fail; previews are now kept forever as documented.
 - Windows: `health` reports a locked session.

@@ -14,7 +14,10 @@ setup(
         "argv_emulation": False,
         "excludes": ["tkinter", "_tkinter", "pytest", "tests"],
         "includes": ["_cffi_backend", "sqlcipher3.dbapi2", "keyring.backends.macOS"],
-        "packages": ["screen_context", "PIL", "cryptography", "keyring", "objc", "Foundation", "AppKit", "Quartz", "ScreenCaptureKit"],
-        "plist": {"CFBundleName": "ScreenContext", "CFBundleDisplayName": "Screen Context", "CFBundleIdentifier": "local.screencontext.capture", "CFBundleVersion": "0.1.0", "CFBundleShortVersionString": "0.1.0", "LSUIElement": True, "CFBundleDevelopmentRegion": "en", "CFBundleLocalizations": ["en", "ja"], "LSMinimumSystemVersion": "14.0"},
+        # uvicorn loads its loop and protocol modules by name at run time, which the import scan misses;
+        # the Today view (`ui`, started from the menu) needs them.
+        "packages": ["screen_context", "PIL", "cryptography", "keyring", "objc", "Foundation", "AppKit", "Quartz", "ScreenCaptureKit",
+                     "starlette", "uvicorn", "h11", "anyio"],
+        "plist": {"CFBundleName": "ScreenContext", "CFBundleDisplayName": "Screen Context", "CFBundleIdentifier": "local.screencontext.capture", "CFBundleVersion": "0.2.0", "CFBundleShortVersionString": "0.2.0", "LSUIElement": True, "CFBundleDevelopmentRegion": "en", "CFBundleLocalizations": ["en", "ja"], "LSMinimumSystemVersion": "14.0"},
     }},
 )

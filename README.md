@@ -98,6 +98,8 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 - **Pause Capture / Resume Capture**: use this while watching video or showing private content. The state is saved.
 - **Capture Interval**: 5 s, 15 s (default), 30 s, 1 min, 2 min or 5 min. The change applies without a restart. Unchanged screens are not saved again.
 - **Language**: System Default, English or 日本語. All menu text, dialogs, and generated material follow this setting.
+- **Open Today…**: opens the [Today view](#today-view) in your browser.
+- **Delete Recent**: last 5 min, 15 min or hour, for when something was recorded by mistake. It shows what it will delete (and which assistants already received it) and asks before deleting. Frames still waiting for OCR in that window are deleted too. No undo.
 
 ## Today view
 
