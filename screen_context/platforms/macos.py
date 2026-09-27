@@ -49,6 +49,11 @@ class Backend:
         alert.addButtonWithTitle_(t("approve.allow", lang))
         return alert.runModal() == NSAlertFirstButtonReturn + 1
 
+    def authenticate(self, reason_text):
+        """Touch ID, or the login password, for a re-authentication request from the Today view (#27)."""
+        from ..reauth import touch_id
+        return touch_id(reason_text)
+
     def approve_client(self, name, profile):
         from AppKit import NSAlert, NSAlertFirstButtonReturn
         from ..config import Settings

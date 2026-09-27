@@ -30,9 +30,9 @@ def sessions(settings, world):
                        on_end=lambda reason: audit.record(settings, "user", ui.CLIENT, "ui.close", params={"reason": reason}))
 
 
-def call(settings, sessions, steps):
+def call(settings, sessions, steps, reauthenticate=None):
     """Run `steps(client)` against the app with a client that keeps cookies, like a browser."""
-    app = ui.create_app(settings, sessions, PORT)
+    app = ui.create_app(settings, sessions, PORT, reauthenticate)
     async def go():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=BASE) as client:
             return await steps(client)

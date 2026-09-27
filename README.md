@@ -98,7 +98,7 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 - **Pause Capture / Resume Capture**: use this while watching video or showing private content. The state is saved.
 - **Capture Interval**: 5 s, 15 s (default), 30 s, 1 min, 2 min or 5 min. The change applies without a restart. Unchanged screens are not saved again.
 - **Language**: System Default, English or 日本語. All menu text, dialogs, and generated material follow this setting.
-- **Open Today…**: opens the [Today view](#today-view) in your browser.
+- **Open Today…**: asks for Touch ID (or your login password), then opens the [Today view](#today-view) in your browser.
 - **Delete Recent**: last 5 min, 15 min or hour, for when something was recorded by mistake. It shows what it will delete (and which assistants already received it) and asks before deleting. Frames still waiting for OCR in that window are deleted too. No undo.
 
 ## Today view
@@ -111,9 +111,9 @@ Tabs next to Today put the maintenance commands on the same screen. Each one run
 
 - **Data**: storage use; how many screens were not recorded, or had lines hidden, for possible personal data; retention periods; deleting records (a range, an app, text, or one interval straight from the digest), with a warning when an assistant or an export already has copies; and stopping recording of an app or site. Deleting what that app or site already recorded is a separate checkbox, off by default. From the digest, "Exclude" next to an app or site fills in this form.
 - **Access log**: what each assistant asked for and which screens it received. Choose "All" to include your own reads and changes.
-- **Clients**: each MCP client, its allowed profile and when it last read your history. Revoke one here.
+- **Clients**: each MCP client, its allowed profile and when it last read your history. Approve a waiting client or revoke one here.
 
-Export, backup and approving a new client need a stronger confirmation (Touch ID or your password), which comes in a later version. Until then, use the CLI for those.
+Exporting a time range as a plaintext file, making a backup, and approving a new client also ask for Touch ID (or your login password). The menu bar app shows the prompt, so it must be running; without it, or when you cancel, nothing changes. Erasing and restoring stay in the terminal (`screen-context wipe`, `screen-context restore FILE`) because the app has to be quit for them. Windows cannot ask yet, so these three changes are refused in its UI; use the CLI there. `screen-context ui` from the terminal does not ask for Touch ID: the terminal can already read the history.
 
 The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
 

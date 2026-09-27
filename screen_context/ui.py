@@ -24,7 +24,8 @@ from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
 import json
-from . import audit, material, sessions as work_sessions, ui_actions, ui_views as views
+from starlette.concurrency import run_in_threadpool
+from . import audit, material, reauth as work_reauth, sessions as work_sessions, ui_actions, ui_views as views
 from .health import screen_locked
 from .i18n import resolve, t
 from .service import Service
@@ -188,7 +189,9 @@ async function write(action, fields) {
   if (!window.confirm(ask.json.message)) return;
   const done = await post(action, {...fields, confirm: ask.json.confirm});
   if (!done) return;
-  if (done.ok) location.reload(); else message.textContent = done.json.error || data.failed;
+  if (!done.ok) { message.textContent = done.json.error || data.failed; return; }
+  if (done.json.notice) window.alert(done.json.notice);
+  location.reload();
 }
 for (const button of document.querySelectorAll("button[data-action]")) {
   button.addEventListener("click", () => {
@@ -213,8 +216,9 @@ timer = setInterval(async () => {
 }, 10000);
 """
 
-def create_app(settings, sessions, port):
+def create_app(settings, sessions, port, reauthenticate=None):
     lang = resolve(settings)
+    reauthenticate = reauthenticate or (lambda reason: work_reauth.request(settings, reason))
     hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {"http://" + host for host in hosts}
     session_id = lambda request: request.cookies.get(COOKIE)
@@ -299,11 +303,19 @@ def create_app(settings, sessions, port):
             if "confirm" not in body:
                 return JSONResponse({"confirm": sessions.confirm(sid, bound), "message": message})
             if not sessions.redeem(sid, bound, body["confirm"]): return JSONResponse({"error": "confirmation"}, 403)
-            result = run(settings, params)
+            if action in ui_actions.REAUTH:
+                # Touch ID or the password, asked by the capture app; waiting must not block other requests.
+                status = await run_in_threadpool(reauthenticate, ui_actions.REAUTH[action])
+                if status != work_reauth.VERIFIED:
+                    audit.record(settings, "user", CLIENT, "ui.reauth", params={"action": action, "status": status})
+                    known = status in (work_reauth.CANCELLED, work_reauth.UNAVAILABLE, work_reauth.NO_APP, work_reauth.TIMEOUT)
+                    return JSONResponse({"error": t("ui.reauth." + (status if known else work_reauth.FAILED), lang)}, 403)
+            result = run(settings, params, lang)
         except PermissionError as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 403)
-        except ValueError as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 400)
+        except (ValueError, OSError) as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 400)
+        notice = result.pop("notice", None)
         audit.record(settings, "user", CLIENT, "ui." + action, params=result)
-        return JSONResponse({"done": True, **result, "message": t("ui.done", lang)})
+        return JSONResponse({"done": True, **result, "notice": notice, "message": t("ui.done", lang)})
 
     routes = [
         Route("/launch", launch, methods=["GET"]),

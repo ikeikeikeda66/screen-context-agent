@@ -4,7 +4,7 @@ import threading
 import objc
 from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny
 from Foundation import NSObject, NSDate, NSDefaultRunLoopMode
-from . import quick
+from . import quick, reauth
 from .config import Settings
 from .i18n import CHOICES, interval_label, resolve, t
 
@@ -36,9 +36,11 @@ class MenuController(NSObject):
             self.showError(t("error.language", self.lang()))
 
     def openToday_(self, sender):
-        # Touch ID before opening (#27) goes here; `screen-context ui` from a terminal is not gated either.
-        try: quick.open_today(self.settings)
-        except Exception as error: self.showError(t("error.open", self.lang(), error=type(error).__name__))
+        lang = self.lang()
+        try:
+            status = quick.open_today(self.settings, lambda: reauth.touch_id(t("auth.reason.open", lang)))
+            if status in (reauth.FAILED, reauth.UNAVAILABLE): self.showError(t("auth.refused." + status, lang))
+        except Exception as error: self.showError(t("error.open", lang, error=type(error).__name__))
 
     def deleteRecent_(self, sender):
         """Quick purge for "I recorded something by mistake": confirm, then `purge --last` (#31)."""

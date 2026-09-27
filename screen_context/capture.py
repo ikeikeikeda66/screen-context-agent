@@ -53,6 +53,9 @@ def run(settings, once=False, stop=None):
     while not stop.is_set():
         from .broker import process_client_requests, process_requests
         process_client_requests(settings, adapter)
+        from .i18n import resolve
+        from .reauth import process_requests as process_reauth
+        process_reauth(settings, adapter, resolve(settings))
         presence.tick(paused=(settings.root / "paused").exists())
         if (settings.root / "paused").exists():
             last_probe = None

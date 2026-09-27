@@ -67,7 +67,7 @@ def test_confirmation_text(settings, monkeypatch):
 
 def test_open_today_starts_the_ui_as_its_own_process(settings, monkeypatch):
     spawned = []
-    quick.open_today(settings, spawn=lambda cmd, **kw: spawned.append((cmd, kw)))
+    assert quick.open_today(settings, lambda: "verified", spawn=lambda cmd, **kw: spawned.append((cmd, kw))) == "verified"
     cmd, kw = spawned[0]
     assert cmd == [sys.executable, "-m", "screen_context.cli", "ui"]
     assert kw["env"]["SCREEN_CONTEXT_HOME"] == str(settings.root) and kw["start_new_session"] is True
@@ -108,3 +108,10 @@ def test_confirmation_counts_frames_not_yet_processed(settings, monkeypatch):
     title, body = quick.confirmation(settings, 5, "en")
     assert body is not None and body.startswith("0 screens, 1 not yet processed")
     assert quick.delete(settings, 5)["spool_files"] == 1 and not list((settings.root / "spool").glob("*.frame"))
+
+
+@pytest.mark.parametrize("status", ["cancelled", "failed", "unavailable", "", None, "VERIFIED"])
+def test_open_today_starts_nothing_unless_verified(settings, status):
+    spawned = []
+    assert quick.open_today(settings, lambda: status, spawn=lambda cmd, **kw: spawned.append(cmd)) == status
+    assert spawned == []

@@ -161,7 +161,8 @@ def test_data_page_shows_usage_skips_forms_and_the_cli_for_reauthenticated_actio
     assert 'data-write="retention"' in text and 'data-write="purge"' in text and 'value="90"' in text
     assert 'name="delete_past">' in text and "checked" not in text.split('name="delete_past"')[1][:20]      # off by default
     assert 'value="news.example.net"' in text and '<option value="domain" selected>' in text
-    assert "screen-context backup FILE" in text and 'data-write="backup"' not in text
+    assert 'data-write="export"' in text and 'data-write="backup"' in text and 'type="password" name="passphrase"' in text
+    assert "screen-context wipe" in text and "screen-context restore FILE" in text and 'data-write="wipe"' not in text
 
 
 def test_access_page_shows_queries_and_returned_screens_escaped(settings, sessions):
@@ -178,11 +179,11 @@ def test_access_page_shows_queries_and_returned_screens_escaped(settings, sessio
     assert ">export<" in everything and "ui.open" in everything
 
 
-def test_clients_page_lists_revokes_and_sends_approval_to_the_app(settings, sessions):
+def test_clients_page_lists_revokes_and_approves(settings, sessions):
     access.issue(settings, "cursor", "full")
     text = page(settings, sessions, "/clients").text
     assert "cursor" in text and "full" in text and "waiting for approval" in text
-    assert 'data-action="revoke" data-param-name="cursor"' in text and "clients approve cursor" in text and 'data-action="approve"' not in text
+    assert 'data-action="revoke" data-param-name="cursor"' in text and 'data-action="approve" data-param-name="cursor"' in text
 
 
 def test_digest_offers_exclude_links_and_deletes_one_interval(settings, sessions):

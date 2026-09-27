@@ -259,8 +259,24 @@ def data(settings, lang, query):
             f'<label>{x("ui.exclude.value")}<input type="text" name="value" maxlength="300" required value="{esc(target)}"></label>'
             f'<label class="check"><input type="checkbox" name="delete_past"> {x("ui.exclude.past")}</label>'
             f'<button type="submit">{x("ui.exclude.button")}</button></form></section>'
-            f'<section><h2>{x("ui.later.title")}</h2><p>{x("ui.later.body")}</p>'
-            f'<pre>screen-context export --from YYYY-MM-DD --format md\nscreen-context backup FILE\nscreen-context clients approve NAME</pre></section>')
+            f'<section id="export"><h2>{x("ui.export.title")}</h2><form class="stack" data-write="export">'
+            f'<label>{x("ui.purge.from")}<input type="date" name="from" required></label>'
+            f'<label>{x("ui.purge.to")}<input type="date" name="to"></label>'
+            f'<label>{x("ui.export.format")}<select name="format"><option value="md">Markdown</option><option value="jsonl">JSON Lines</option>'
+            f'<option value="csv">CSV</option></select></label>'
+            f'<label class="check"><input type="checkbox" name="exclude_ide"> {x("ui.export.ide")}</label>'
+            f'<button type="submit">{x("ui.export.button")}</button><span class="note">{x("ui.reauth.note")}</span></form></section>'
+            f'<section id="backup"><h2>{x("ui.backup.title")}</h2><form class="stack" data-write="backup" autocomplete="off">'
+            f'<label>{x("ui.backup.path")}<input type="text" name="path" required value="{esc(backup_path())}"></label>'
+            f'<label>{x("ui.backup.passphrase")}<input type="password" name="passphrase" minlength="12" required autocomplete="new-password"></label>'
+            f'<label>{x("ui.backup.again")}<input type="password" name="again" minlength="12" required autocomplete="new-password"></label>'
+            f'<button type="submit">{x("ui.backup.button")}</button><span class="note">{x("ui.reauth.note")}</span></form></section>'
+            f'<section><h2>{x("ui.cli.title")}</h2><p>{x("ui.cli.body")}</p><pre>screen-context wipe\nscreen-context restore FILE</pre></section>')
+
+
+def backup_path():
+    from pathlib import Path
+    return str(Path.home() / f"ScreenContext-backup-{datetime.now():%Y%m%d}.zip")
 
 
 def access(settings, lang, client):
@@ -292,7 +308,7 @@ def access(settings, lang, client):
 
 
 def clients(settings, lang):
-    """MCP clients with their profile ceiling; revoke here, approve in the app (needs re-authentication)."""
+    """MCP clients with their profile ceiling. Revoking is immediate; approving needs Touch ID or the password."""
     from . import access as tokens
     x = Text(lang)
     rows = tokens.clients(settings)
@@ -300,7 +316,8 @@ def clients(settings, lang):
     when = lambda ts: datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "–"
     def actions(c):
         out = ""
-        if c["state"] == "pending": out += f'<div class="muted">{x("ui.clients.pending", name=c["name"])}</div>'
+        if c["state"] == "pending":
+            out += f'<button type="button" class="small" data-action="approve" data-param-name="{esc(c["name"])}">{x("ui.clients.approve")}</button> '
         if c["state"] != "revoked":
             out += f'<button type="button" class="small" data-action="revoke" data-param-name="{esc(c["name"])}">{x("ui.clients.revoke")}</button>'
         return out

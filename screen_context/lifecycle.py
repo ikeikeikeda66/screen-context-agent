@@ -60,7 +60,7 @@ def derive(passphrase, salt, n=2**15):
     return Scrypt(salt=salt, length=32, n=n, r=8, p=1).derive(passphrase.encode())
 
 
-def backup(settings, target, passphrase):
+def backup(settings, target, passphrase, actor="cli"):
     if settings.option("backup_allowed", True) is False: raise PermissionError("Backups are disabled by your administrator")
     if len(passphrase) < MIN_PASSPHRASE: raise ValueError(f"Use a passphrase of at least {MIN_PASSPHRASE} characters")
     target = Path(target)
@@ -84,7 +84,7 @@ def backup(settings, target, passphrase):
                 if (settings.root / name).exists(): archive.write(settings.root / name, name)
         os.replace(partial, target)
     target.chmod(0o600)
-    audit.record(settings, "user", "cli", "backup", params={"images": len(images)})
+    audit.record(settings, "user", actor, "backup", params={"images": len(images)})
     return {"backup": str(target), "images": len(images), "encrypted": manifest["encrypted"]}
 
 

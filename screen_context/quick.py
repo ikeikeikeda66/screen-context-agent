@@ -47,10 +47,15 @@ def ui_command():
     return [sys.executable, "-m", "screen_context.cli", "ui"]
 
 
-def open_today(settings, spawn=subprocess.Popen):
-    """Start the Today view for this data folder; it opens the browser with a one-time link and
-    exits when its session ends. Touch ID before this call is #27."""
+def open_today(settings, authenticate, spawn=subprocess.Popen):
+    """Start the Today view for this data folder once `authenticate()` returns "verified" (Touch ID
+    or the password, #27). Nothing starts, so no launch token exists, otherwise. The UI opens the
+    browser with a one-time link and exits when its session ends. Returns the check's result."""
+    from .reauth import VERIFIED
+    status = authenticate()
+    if status != VERIFIED: return status
     env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root)}
     if settings.plaintext: env["SCREEN_CONTEXT_PLAINTEXT"] = "1"
-    return spawn(ui_command(), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                 stderr=subprocess.DEVNULL, start_new_session=True)
+    spawn(ui_command(), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+          stderr=subprocess.DEVNULL, start_new_session=True)
+    return status
