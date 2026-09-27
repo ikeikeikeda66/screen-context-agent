@@ -10,11 +10,12 @@
 - `screen-context exclude --app | --domain [--delete-past]`; `usage` reports the not-recorded counts.
 - macOS menu bar: "Open Today…" and "Delete Recent" (last 5 min, 15 min or hour), through the same purge path as `purge --last` (#31).
 - Touch ID (or the login password) before "Open Today…" and before exporting, backing up or approving a client in the UI; the menu bar app asks, and any other answer refuses the change. Windows refuses these three in the UI for now (#27).
+- `screen-context review [--days N] [--format md]`: a dogfooding report with counts only — days the Today view was opened, Resume card feedback, sessions per idle threshold, sensitive-input counts (#32).
 - Purge warnings no longer count your own page views in the UI as copies; the UI's copy button still counts.
 - Fixed: `retention --preview none` made hourly maintenance fail; previews are now kept forever as documented.
 - Windows: `health` reports a locked session.
 
-日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、Touch ID による再認証（Today を開く・出力・バックアップ・承認）を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID による再認証（Today を開く・出力・バックアップ・承認）を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
 
 ## 0.2.0 — Trust foundation / 信頼の土台
 

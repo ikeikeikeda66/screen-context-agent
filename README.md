@@ -107,6 +107,8 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 
 At the top of today's page, the **Where you left off** card shows your latest work session: its main activities, the documents you had open, and the last text on screen. A work session spans apps and ends at a screen lock, a pause of capture, or 15 minutes without input (`screen-context sessions --idle MINUTES` changes that). The card appears only when you open the page; nothing is pushed to you. Its "Helpful" and "Off" buttons store your verdict in the local database so you can tune the threshold (`screen-context sessions` shows the counts); this feedback is never served over MCP. To split sessions, the capture app records when the screen was locked, idle or paused; this history follows the text retention setting. The Today view's own pages are never recorded.
 
+`screen-context review [--days 14] [--format md]` summarizes how you used it: the days the Today view was opened (working days against a target of 10), the card's feedback, how many sessions each idle threshold from 5 to 30 minutes would give on the same days, and how many screens each sensitive-input rule held back. It holds counts only, never screen text, titles or queries, so the Markdown can go into an issue as is.
+
 Tabs next to Today put the maintenance commands on the same screen. Each one runs the same code as its CLI command and asks you to confirm what it will do first:
 
 - **Data**: storage use; how many screens were not recorded, or had lines hidden, for possible personal data; retention periods; deleting records (a range, an app, text, or one interval straight from the digest), with a warning when an assistant or an export already has copies; and stopping recording of an app or site. Deleting what that app or site already recorded is a separate checkbox, off by default. From the digest, "Exclude" next to an app or site fills in this form.
@@ -262,6 +264,7 @@ screen-context maintain             retention and daily rollups
 screen-context language [system|en|ja]
 screen-context ui [--no-browser]       Today view: digest, search, copy for your assistant (127.0.0.1, one-time link)
 screen-context sessions [--idle MIN]    work-session threshold, Resume card feedback, latest session
+screen-context review [--days N] [--format md]  usage report for tuning (counts only)
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]

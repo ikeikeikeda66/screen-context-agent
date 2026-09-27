@@ -24,6 +24,8 @@ def main():
     mcp = sub.add_parser("serve"); mcp.add_argument("--profile", choices=profiles, default="standard"); mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio"); mcp.add_argument("--port", type=int, default=8765)
     work = sub.add_parser("sessions", help="Work session threshold, Resume card feedback and the latest session")
     work.add_argument("--idle", type=int, metavar="MINUTES", help="idle time that ends a session (1–240; default 15)")
+    review = sub.add_parser("review", help="Dogfooding report: days the Today view was opened, Resume card feedback, sensitive-input counts (counts only)")
+    review.add_argument("--days", type=int, default=14); review.add_argument("--format", choices=["json", "md"], default="json")
     ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
     ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
@@ -230,6 +232,12 @@ def main():
         if args.idle is not None: settings.set_session_idle_minutes(args.idle)
         result = {"idle_minutes": settings.session_idle_minutes(), "feedback": sessions.feedback_summary(settings),
                   "latest": sessions.resume(settings, client="cli")}
+    elif args.command == "review":
+        from . import review
+        from .i18n import resolve
+        if not 1 <= args.days <= 366: parser.error("--days must be 1-366")
+        result = review.report(settings, days=args.days)
+        if args.format == "md": print(review.markdown(result, resolve(settings))); return
     elif args.command == "ui":
         from .ui import run
         run(settings, open_browser=not args.no_browser); return
