@@ -43,6 +43,11 @@ def main():
     sub.add_parser("usage", help="Disk space by kind of data, and the retention periods")
     keep = sub.add_parser("retention", help="Show or set how long data is kept (days, or none for forever)")
     for flag in ("preview", "text", "audit"): keep.add_argument("--" + flag, metavar="DAYS|none")
+    exclude = sub.add_parser("exclude", help="Add an app or domain to the exclusion policy")
+    target = exclude.add_mutually_exclusive_group(required=True)
+    target.add_argument("--app", help="bundle ID (macOS) or process name (Windows)"); target.add_argument("--domain")
+    exclude.add_argument("--delete-past", action="store_true", help="also delete what it already matches (no undo)")
+    exclude.add_argument("--yes", action="store_true", help="with --delete-past: delete (otherwise only report)")
     purge = sub.add_parser("purge", help="Delete frames and everything derived from them (no undo)")
     purge.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     purge.add_argument("--to", dest="until", help="local time, exclusive"); purge.add_argument("--last", help="for example 15m, 2h, 1d")
@@ -124,24 +129,20 @@ def main():
             except (ValueError, PermissionError) as error: parser.error(str(error))
         result = {name: settings.retention(name) for name in ("preview_retention_days", "text_retention_days", "audit_retention_days")}
     elif args.command == "purge":
-        import time
         from datetime import datetime
         from . import purge
         try:
             since = datetime.fromisoformat(args.since).timestamp() if args.since else None
             until = datetime.fromisoformat(args.until).timestamp() if args.until else None
-            if args.last: since = max(since or 0, time.time() - purge.duration(args.last))
-            selector = {"since": since, "until": until, "app": args.app, "keyword": args.keyword, "block": args.block, "excluded": args.excluded}
-            ids = purge.select(settings, **selector)
+            result = purge.run(settings, since, until, args.last, args.app, args.keyword, args.block, args.excluded, apply=args.yes)
         except ValueError as error: parser.error(str(error))
-        # Frames not yet OCRed match only on time and app; content selectors cannot see them.
-        content = args.keyword or args.block or args.excluded
-        spool_files = [] if content or (since is None and until is None) else purge.spooled(settings, since, until, args.app)
-        if not args.yes:
-            result = {**purge.plan(settings, ids, spool_files), "deleted": False,
-                      "next": "Run again with --yes to delete. This cannot be undone."}
-        elif not ids and not spool_files: result = {"frames": 0, "deleted": False}
-        else: result = {**purge.execute(settings, ids, selector, spool_files), "deleted": True}
+        if not args.yes: result["next"] = "Run again with --yes to delete. This cannot be undone."
+    elif args.command == "exclude":
+        from .exclusions import exclude
+        kind, value = ("app", args.app) if args.app else ("domain", args.domain)
+        try: result = exclude(settings, kind, value, args.delete_past, apply=args.yes or not args.delete_past)
+        except (ValueError, PermissionError) as error: parser.error(str(error))
+        if args.delete_past and not args.yes: result["next"] = "Run again with --yes to add the rule and delete these frames. This cannot be undone."
     elif args.command == "pii-scan":
         from . import rescan
         drops, redactions = rescan.scan(settings)

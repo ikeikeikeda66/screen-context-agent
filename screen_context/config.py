@@ -89,6 +89,11 @@ class Settings:
             raise ValueError("Session idle time must be 1–240 minutes")
         self.save_option("session_idle_minutes", minutes)
 
+    def preview_cutoff(self, now):
+        """Oldest timestamp whose preview is kept; 0 when previews are kept forever (`none`)."""
+        days = self.retention("preview_retention_days")
+        return 0 if days is None else now - days * 86400
+
     def retention(self, name):
         value = self.option(name, RETENTION[name])
         if value is not None and (type(value) is not int or not 1 <= value <= 36500):

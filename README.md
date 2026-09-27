@@ -105,6 +105,14 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 
 At the top of today's page, the **Where you left off** card shows your latest work session: its main activities, the documents you had open, and the last text on screen. A work session spans apps and ends at a screen lock, a pause of capture, or 15 minutes without input (`screen-context sessions --idle MINUTES` changes that). The card appears only when you open the page; nothing is pushed to you. Its "Helpful" and "Off" buttons store your verdict in the local database so you can tune the threshold (`screen-context sessions` shows the counts); this feedback is never served over MCP. To split sessions, the capture app records when the screen was locked, idle or paused; this history follows the text retention setting. The Today view's own pages are never recorded.
 
+Tabs next to Today put the maintenance commands on the same screen. Each one runs the same code as its CLI command and asks you to confirm what it will do first:
+
+- **Data**: storage use; how many screens were not recorded, or had lines hidden, for possible personal data; retention periods; deleting records (a range, an app, text, or one interval straight from the digest), with a warning when an assistant or an export already has copies; and stopping recording of an app or site. Deleting what that app or site already recorded is a separate checkbox, off by default. From the digest, "Exclude" next to an app or site fills in this form.
+- **Access log**: what each assistant asked for and which screens it received. Choose "All" to include your own reads and changes.
+- **Clients**: each MCP client, its allowed profile and when it last read your history. Revoke one here.
+
+Export, backup and approving a new client need a stronger confirmation (Touch ID or your password), which comes in a later version. Until then, use the CLI for those.
+
 The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
 
 ## Connect an MCP client
@@ -260,6 +268,7 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 
 # Your data
+screen-context exclude --app ID | --domain NAME [--delete-past [--yes]]   stop recording an app or site
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
 screen-context usage                    disk space by kind of data

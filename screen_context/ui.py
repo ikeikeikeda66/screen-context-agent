@@ -23,7 +23,8 @@ import time
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
-from . import audit, material, sessions as work_sessions, ui_views as views
+import json
+from . import audit, material, sessions as work_sessions, ui_actions, ui_views as views
 from .health import screen_locked
 from .i18n import resolve, t
 from .service import Service
@@ -115,20 +116,6 @@ class Sessions:
         self.confirms = {n: c for n, c in self.confirms.items() if c[0] != key}
 
 
-def set_paused(settings, paused):
-    flag = settings.root / "paused"
-    if paused: flag.touch(mode=0o600)
-    else: flag.unlink(missing_ok=True)
-    return {"paused": paused}
-
-
-# Writes the UI offers: action -> (confirmation text key, function of settings returning audit params).
-WRITES = {
-    "pause": ("ui.confirm.pause", lambda settings: set_paused(settings, True)),
-    "resume": ("ui.confirm.resume", lambda settings: set_paused(settings, False)),
-}
-
-
 class Guard:
     """Refuse requests for any other Host, and add the security headers to every response."""
     def __init__(self, app, hosts):
@@ -192,16 +179,32 @@ if (card) for (const button of card.querySelectorAll("button[data-feedback]")) {
     for (const b of card.querySelectorAll("button[data-feedback]")) b.disabled = true;
   });
 }
+// Every write: ask the server what it would do, show that, and send the same fields back with the nonce.
+async function write(action, fields) {
+  const message = document.getElementById("message");
+  const ask = await post(action, fields);
+  if (!ask) return;
+  if (!ask.ok || !ask.json.confirm) { message.textContent = ask.json.error || data.failed; return; }
+  if (!window.confirm(ask.json.message)) return;
+  const done = await post(action, {...fields, confirm: ask.json.confirm});
+  if (!done) return;
+  if (done.ok) location.reload(); else message.textContent = done.json.error || data.failed;
+}
 for (const button of document.querySelectorAll("button[data-action]")) {
-  button.addEventListener("click", async () => {
-    const message = document.getElementById("message"), action = button.dataset.action;
-    const ask = await post(action, {});
-    if (!ask) return;
-    if (!ask.ok || !ask.json.confirm) { message.textContent = data.failed; return; }
-    if (!window.confirm(ask.json.message)) return;
-    const done = await post(action, {confirm: ask.json.confirm});
-    if (!done) return;
-    if (done.ok) location.reload(); else message.textContent = data.failed;
+  button.addEventListener("click", () => {
+    const fields = {};
+    for (const [key, value] of Object.entries(button.dataset))
+      if (key.startsWith("param")) fields[key.slice(5).toLowerCase()] = value;
+    write(button.dataset.action, fields);
+  });
+}
+for (const form of document.querySelectorAll("form[data-write]")) {
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    const fields = {};
+    for (const input of form.elements)
+      if (input.name) fields[input.name] = input.type === "checkbox" ? input.checked : input.value;
+    write(form.dataset.write, fields);
   });
 }
 timer = setInterval(async () => {
@@ -233,6 +236,13 @@ def create_app(settings, sessions, port):
         content = views.card(settings, lang, date, CLIENT) + views.today(settings, lang, date, CLIENT)
         return HTMLResponse(views.page(settings, lang, date, content))
 
+    def tab(name, render):
+        def endpoint(request):
+            if not signed_in(request): return notice("ui.expired", 401)
+            date = views.day(request.query_params.get("date"))
+            return HTMLResponse(views.page(settings, lang, date, render(request), tab=name))
+        return endpoint
+
     def search(request):
         if not signed_in(request): return notice("ui.expired", 401)
         date, query = views.day(request.query_params.get("date")), request.query_params.get("q", "")
@@ -241,7 +251,8 @@ def create_app(settings, sessions, port):
     def diary(request):
         """The `diary-material` Markdown for the copy button (audited like the CLI command)."""
         if not signed_in(request): return PlainTextResponse("", status_code=401)
-        return PlainTextResponse(material.diary_markdown(settings, views.day(request.query_params.get("date")), client=CLIENT, lang=lang))
+        # Audited as "ui.copy": unlike a page view, this copy leaves the store, so purge warns about it.
+        return PlainTextResponse(material.diary_markdown(settings, views.day(request.query_params.get("date")), client=CLIENT + ".copy", lang=lang))
 
     def image(request):
         if not signed_in(request): return Response(status_code=401)
@@ -276,23 +287,32 @@ def create_app(settings, sessions, port):
 
     async def write(request):
         action = request.path_params["action"]
-        if action not in WRITES: return JSONResponse({"error": "unknown action"}, 404)
+        if action not in ui_actions.ACTIONS: return JSONResponse({"error": "unknown action"}, 404)
         body, refused = await json_body(request)
         if refused: return refused
         sid = session_id(request)
-        prompt, run = WRITES[action]
-        if "confirm" not in body:
-            return JSONResponse({"confirm": sessions.confirm(sid, action), "message": t(prompt, lang)})
-        if not sessions.redeem(sid, action, body["confirm"]): return JSONResponse({"error": "confirmation"}, 403)
-        params = run(settings)
-        audit.record(settings, "user", CLIENT, "ui." + action, params=params)
-        return JSONResponse({"done": True, **params, "message": t("ui.done", lang)})
+        prepare, run = ui_actions.ACTIONS[action]
+        try:
+            params, message = prepare(settings, body, lang)
+            # The nonce confirms these exact parameters: changing any of them needs a new confirmation.
+            bound = action + ":" + digest(json.dumps(params, sort_keys=True, ensure_ascii=False))
+            if "confirm" not in body:
+                return JSONResponse({"confirm": sessions.confirm(sid, bound), "message": message})
+            if not sessions.redeem(sid, bound, body["confirm"]): return JSONResponse({"error": "confirmation"}, 403)
+            result = run(settings, params)
+        except PermissionError as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 403)
+        except ValueError as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 400)
+        audit.record(settings, "user", CLIENT, "ui." + action, params=result)
+        return JSONResponse({"done": True, **result, "message": t("ui.done", lang)})
 
     routes = [
         Route("/launch", launch, methods=["GET"]),
         Route("/", index, methods=["GET"]),
         Route("/state", state, methods=["GET"]),
         Route("/search", search, methods=["GET"]),
+        Route("/data", tab("data", lambda request: views.data(settings, lang, request.query_params)), methods=["GET"]),
+        Route("/access", tab("access", lambda request: views.access(settings, lang, request.query_params.get("client", ""))), methods=["GET"]),
+        Route("/clients", tab("clients", lambda request: views.clients(settings, lang)), methods=["GET"]),
         Route("/material", diary, methods=["GET"]),
         Route("/image/{frame_id}", image, methods=["GET"]),
         Route("/ui.js", lambda request: Response(SCRIPT, media_type="text/javascript"), methods=["GET"]),

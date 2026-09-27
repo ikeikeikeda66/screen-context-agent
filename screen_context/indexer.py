@@ -93,7 +93,7 @@ def maintain(settings, now=None):
     from datetime import datetime
     from . import purge
     now = now or time.time()
-    cutoff = now - settings.retention("preview_retention_days")*86400
+    cutoff = settings.preview_cutoff(now)
     text_days, audit_days = settings.retention("text_retention_days"), settings.retention("audit_retention_days")
     expired_text = []
     if text_days:

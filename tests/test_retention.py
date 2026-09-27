@@ -88,3 +88,18 @@ def test_cli_retention_and_usage(settings):
     report = json.loads(run("usage").stdout)
     assert report["previews_bytes"] == 1000 and report["database_bytes"] > 0 and report["frames"] == 1
     assert report["retention"]["preview_retention_days"] == 30
+
+
+def test_previews_kept_forever_with_none(settings):
+    """`retention --preview none` is accepted; maintenance and image reads must honour it, not crash."""
+    import time as _time
+    from screen_context.indexer import maintain
+    from screen_context.service import Service
+    from screen_context import store as _store
+    frame = add(settings, "old preview", ts=_time.time() - 400 * 86400)
+    (settings.root / "images").mkdir(exist_ok=True)
+    (settings.root / "images" / f"{frame['id']}.webp").write_bytes(b"old")
+    with _store.connect(settings) as con: con.execute("UPDATE frames SET image_path=? WHERE id=?", (f"{frame['id']}.webp", frame["id"]))
+    settings.set_retention("preview_retention_days", None)
+    maintain(settings)
+    assert Service(settings, "full").get_snapshot_image(frame["id"]) == b"old"

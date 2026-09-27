@@ -114,9 +114,9 @@ def clients(settings):
                FROM clients c ORDER BY c.name""")]
 
 
-def revoke(settings, name):
+def revoke(settings, name, actor="cli"):
     with store.connect(settings) as con:
         changed = con.execute("UPDATE clients SET state='revoked', revoked_at=? WHERE name=? AND state!='revoked'",
                               (time.time(), name)).rowcount
     if not changed: raise ValueError(f"No active client named {name}")
-    audit.record(settings, "user", "cli", "clients.revoke", params={"name": name})
+    audit.record(settings, "user", actor, "clients.revoke", params={"name": name})

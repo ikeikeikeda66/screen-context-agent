@@ -76,7 +76,7 @@ def digest(settings, date, client="ui"):
     apps, domains, pages_seen = {}, {}, {}
     for b in merged:
         seconds = b["end_ts"] - b["start_ts"]
-        app = apps.setdefault(b["app"], {"app": b["app"], "seconds": 0, "frames": 0, "intervals": 0})
+        app = apps.setdefault(b["app"], {"app": b["app"], "app_bundle": b["app_bundle"], "seconds": 0, "frames": 0, "intervals": 0})
         app["seconds"] += seconds; app["frames"] += b["frames"]; app["intervals"] += 1
         shown = sites(b["domains"])
         for name in shown:
@@ -87,7 +87,7 @@ def digest(settings, date, client="ui"):
     order = lambda rows: sorted(rows, key=lambda r: (-r["seconds"], -r["intervals"]))
     return {"date": date, "timezone": meta["timezone"] if meta else "",
             "start_ts": merged[0]["start_ts"] if merged else None, "end_ts": merged[-1]["end_ts"] if merged else None,
-            "intervals": [{k: b[k] for k in ("frame_id", "start_ts", "end_ts", "app", "titles", "frames")} | {"domains": sites(b["domains"])}
+            "intervals": [{k: b[k] for k in ("frame_id", "start_ts", "end_ts", "app", "app_bundle", "titles", "frames")} | {"domains": sites(b["domains"])}
                           for b in merged],
             "frames": sum(b["frames"] for b in merged),
             "apps": order(apps.values()), "domains": order(domains.values()),

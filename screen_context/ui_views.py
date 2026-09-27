@@ -8,6 +8,7 @@ import html
 import re
 import time
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from . import material, sessions, store
 from .i18n import t
 from .privacy import SELF_TITLE
@@ -33,6 +34,13 @@ ol.results { padding-left: 1.2rem; }
 ol.results li { margin-bottom: 1rem; overflow-wrap: anywhere; }
 section.card { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 8px; padding: .2rem 1rem .6rem; margin: 1rem 0; }
 blockquote { margin: .5rem 0; padding-left: .8rem; border-left: 3px solid var(--muted); overflow-wrap: anywhere; }
+nav.tabs { gap: 1rem; margin-bottom: .6rem; }
+nav.tabs a[aria-current=page] { font-weight: 600; text-decoration: none; }
+.small { font-size: .85rem; padding: .1rem .4rem; }
+form.stack { display: grid; gap: .5rem; max-width: 30rem; }
+form.stack label { display: grid; gap: .2rem; }
+form.stack label.check { display: flex; gap: .4rem; align-items: center; }
+pre { white-space: pre-wrap; background: color-mix(in srgb, currentColor 6%, transparent); padding: .5rem; }
 img.preview { display: block; max-width: 100%; max-height: 18rem; margin-top: .4rem; border: 1px solid var(--muted); }
 """
 
@@ -67,9 +75,15 @@ def notice(lang, key):
     return document(lang, f'<body><main><h1>{esc(t("ui.title", lang))}</h1><p>{esc(t(key, lang))}</p></main></body>')
 
 
-def page(settings, lang, date, content, query=""):
-    """The frame every signed-in page shares: capture state, date navigation and search."""
+TABS = (("today", "/", "ui.tab.today"), ("data", "/data", "ui.tab.data"), ("access", "/access", "ui.tab.access"),
+        ("clients", "/clients", "ui.tab.clients"))
+
+
+def page(settings, lang, date, content, query="", tab="today"):
+    """The frame every signed-in page shares: capture state, tabs, date navigation and search."""
     x = Text(lang)
+    current = ' aria-current="page"'
+    tabs = "".join(f'<a href="{href}"{current if name == tab else ""}>{x(key)}</a>' for name, href, key in TABS)
     paused = (settings.root / "paused").exists()
     action = "resume" if paused else "pause"
     data = " ".join(f'data-{name}="{x(key)}"' for name, key in
@@ -77,6 +91,7 @@ def page(settings, lang, date, content, query=""):
     return document(lang, f'<body {data}><main>'
         f'<header><h1>{x("ui.title")}</h1><div><span id="status">{x("ui.status.paused" if paused else "ui.status.recording")}</span> '
         f'<button type="button" data-action="{action}">{x("ui." + action)}</button></div></header>'
+        f'<nav class="tabs">{tabs}</nav>'
         f'<nav><a href="/?date={shift(date, -1)}">{x("ui.nav.prev")}</a>'
         f'<form method="get" action="/"><input type="date" name="date" value="{date}" aria-label="{x("ui.nav.go")}">'
         f'<button type="submit">{x("ui.nav.go")}</button></form>'
@@ -123,6 +138,18 @@ def table(headers, rows):
     return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
+def exclude_link(x, kind, value):
+    return f'<a class="small" href="/data?kind={kind}&amp;value={quote(value or "")}#exclude">{x("ui.exclude.link")}</a>'
+
+
+def delete_button(x, interval):
+    """Deletes this interval: its app's frames between its first and last screen (`purge --from --to --app`)."""
+    start = datetime.fromtimestamp(interval["start_ts"]).isoformat(timespec="seconds")
+    end = datetime.fromtimestamp(interval["end_ts"] + 1).isoformat(timespec="seconds")
+    return (f'<button type="button" class="small" data-action="purge" data-param-from="{start}" data-param-to="{end}" '
+            f'data-param-app="{esc(interval["app_bundle"])}">{x("ui.purge.interval")}</button>')
+
+
 def today(settings, lang, date, client):
     x, d = Text(lang), material.digest(settings, date, client)
     out = [f"<section><h2>{date}</h2>"]
@@ -132,18 +159,18 @@ def today(settings, lang, date, client):
                f'<p><button type="button" id="copy" data-date="{date}">{x("ui.copy")}</button></p>')
     out.append(f'<h3>{x("ui.digest.apps")}</h3>' + table(
         [(x("ui.col.app"), False), (x("ui.col.observed"), True), (x("ui.col.intervals"), True), (x("ui.col.screens"), True)],
-        [(esc(a["app"]), x.minutes(a["seconds"]), a["intervals"], a["frames"]) for a in d["apps"]]))
+        [(f'{esc(a["app"])} {exclude_link(x, "app", a["app_bundle"])}', x.minutes(a["seconds"]), a["intervals"], a["frames"]) for a in d["apps"]]))
     if d["domains"]:
         out.append(f'<h3>{x("ui.digest.sites")}</h3>' + table(
             [(x("ui.col.site"), False), (x("ui.col.observed"), True), (x("ui.col.intervals"), True)],
-            [(esc(s["domain"]), x.minutes(s["seconds"]), s["intervals"]) for s in d["domains"][:30]]))
+            [(f'{esc(s["domain"])} {exclude_link(x, "domain", s["domain"])}', x.minutes(s["seconds"]), s["intervals"]) for s in d["domains"][:30]]))
     if d["pages"]:
         items = "".join(f'<li>{hm(p["ts"])} {esc(p["title"][:200])} <span class="muted">{esc(", ".join(p["domains"][:3]))}</span></li>'
                         for p in d["pages"][:100])
         out.append(f'<h3>{x("ui.digest.pages")}</h3><ul>{items}</ul>')
     items = "".join(f'<li>{hm(i["start_ts"])}–{hm(i["end_ts"])} <strong>{esc(i["app"])}</strong> '
                     f'{esc(" / ".join(title[:80] for title in i["titles"][:3]))} '
-                    f'<span class="muted">{esc(", ".join(i["domains"][:3]))}</span></li>' for i in d["intervals"])
+                    f'<span class="muted">{esc(", ".join(i["domains"][:3]))}</span> {delete_button(x, i)}</li>' for i in d["intervals"])
     out.append(f'<h3>{x("ui.digest.intervals")}</h3><ol>{items}</ol><p class="note">{x("ui.observed.note")}</p></section>')
     return "".join(out)
 
@@ -161,7 +188,7 @@ def snippet(text, query, radius=120):
 def previewable(settings, ids):
     """Frame IDs that still have a preview image within retention."""
     if not ids: return set()
-    cutoff = time.time() - settings.retention("preview_retention_days") * 86400
+    cutoff = settings.preview_cutoff(time.time())
     with store.connect(settings, readonly=True) as con:
         rows = con.execute(f"SELECT id FROM frames WHERE image_path IS NOT NULL AND ts >= ? AND id IN ({','.join('?' * len(ids))})",
                            [cutoff, *ids])
@@ -183,3 +210,100 @@ def search(settings, lang, query, date, client):
         items.append(f'<li><div class="muted"><a href="/?date={when:%Y-%m-%d}">{when:%Y-%m-%d %H:%M}</a> · {esc(r["app"])} · {esc((r["title"] or "")[:200])}</div>'
                      f'<p>{snippet(r["text"] or "", query)}</p>{image}</li>')
     return f'<section><h2>{x("ui.search.results", n=len(records), query=query)}</h2>{back}<ol class="results">{"".join(items)}</ol></section>'
+
+
+# --- control tabs (#30): the same functions as the CLI commands ---------------------------------
+
+def size(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB": return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def skipped(x, counts):
+    if not counts: return f'<p>{x("ui.skipped.none")}</p>'
+    items = []
+    for category, n in counts.items():
+        if category in ("card_number", "my_number"): items.append(x("ui.skipped.dropped", n=n, what=t("ui.skip." + category, x.lang)))
+        else: items.append(x("ui.skipped.redacted", n=n, what=t("ui.skip.combination", x.lang, rule=category)))
+    return "<ul>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
+
+
+def data(settings, lang, query):
+    """Storage, what was held back, retention, deletion, exclusion; export and backup via the CLI."""
+    from .storage import usage
+    x, u = Text(lang), usage(settings)
+    oldest = datetime.fromtimestamp(u["oldest_frame_ts"]).strftime("%Y-%m-%d") if u["oldest_frame_ts"] else "–"
+    r = u["retention"]
+    value = lambda v: "" if v is None else v
+    kind, target = query.get("kind", "app"), query.get("value", "")
+    option = lambda k: f'<option value="{k}"{" selected" if kind == k else ""}>{x("ui.exclude." + k)}</option>'
+    return (f'<section><h2>{x("ui.usage.title")}</h2>'
+            + table([("", False), ("", True)], [(x("ui.usage.previews"), size(u["previews_bytes"])), (x("ui.usage.database"), size(u["database_bytes"])),
+                                               (x("ui.usage.spool"), size(u["spool_bytes"])), (x("ui.usage.exports"), size(u["exports_bytes"]))])
+            + f'<p class="muted">{x("ui.usage.frames", frames=u["frames"], previews=u["frames_with_preview"], oldest=oldest)}</p></section>'
+            f'<section><h2>{x("ui.skipped.title")}</h2>{skipped(x, u["skipped"])}</section>'
+            f'<section><h2>{x("ui.retention.title")}</h2><form class="stack" data-write="retention">'
+            f'<label>{x("ui.retention.preview")}<input type="number" name="preview" min="1" max="36500" required value="{value(r["preview_retention_days"])}"></label>'
+            f'<label>{x("ui.retention.text")}<input type="number" name="text" min="1" max="36500" value="{value(r["text_retention_days"])}"></label>'
+            f'<label>{x("ui.retention.audit")}<input type="number" name="audit" min="1" max="36500" value="{value(r["audit_retention_days"])}"></label>'
+            f'<button type="submit">{x("ui.retention.save")}</button></form></section>'
+            f'<section id="purge"><h2>{x("ui.purge.title")}</h2><form class="stack" data-write="purge">'
+            f'<label>{x("ui.purge.from")}<input type="datetime-local" name="from" step="1"></label>'
+            f'<label>{x("ui.purge.to")}<input type="datetime-local" name="to" step="1"></label>'
+            f'<label>{x("ui.purge.app")}<input type="text" name="app" maxlength="200"></label>'
+            f'<label>{x("ui.purge.keyword")}<input type="text" name="keyword" maxlength="500"></label>'
+            f'<button type="submit">{x("ui.purge.button")}</button></form></section>'
+            f'<section id="exclude"><h2>{x("ui.exclude.title")}</h2><form class="stack" data-write="exclude">'
+            f'<label><select name="kind">{option("app")}{option("domain")}</select></label>'
+            f'<label>{x("ui.exclude.value")}<input type="text" name="value" maxlength="300" required value="{esc(target)}"></label>'
+            f'<label class="check"><input type="checkbox" name="delete_past"> {x("ui.exclude.past")}</label>'
+            f'<button type="submit">{x("ui.exclude.button")}</button></form></section>'
+            f'<section><h2>{x("ui.later.title")}</h2><p>{x("ui.later.body")}</p>'
+            f'<pre>screen-context export --from YYYY-MM-DD --format md\nscreen-context backup FILE\nscreen-context clients approve NAME</pre></section>')
+
+
+def access(settings, lang, client):
+    """The audit log, newest first: who read what, with the query and the screens returned."""
+    from . import audit
+    x = Text(lang)
+    # Default: what assistants read (the agent path). "*" adds your own reads and changes.
+    if client in ("", "*"):
+        rows = [r for r in audit.rows(settings, limit=2000) if client == "*" or r["path"] == "agent"][:200]
+    else: rows = audit.rows(settings, client=client, limit=200)
+    names = sorted({r["client"] for r in audit.rows(settings, limit=5000)})
+    pick = lambda value, label: f'<option value="{esc(value)}"{" selected" if value == client else ""}>{label}</option>'
+    options = pick("", x("ui.access.agents")) + pick("*", x("ui.access.all")) + "".join(pick(n, esc(n)) for n in names)
+    head = (f'<section><h2>{x("ui.access.title")}</h2><form method="get" action="/access"><select name="client">{options}</select>'
+            f'<button type="submit">{x("ui.access.filter")}</button></form>')
+    if not rows: return head + f'<p>{x("ui.access.none")}</p></section>'
+    ids = list({i for r in rows for i in r["frame_ids"][:5]})
+    titles = {}
+    if ids:
+        with store.connect(settings, readonly=True) as con:
+            titles = {r["id"]: r["window_title"] for r in con.execute(f"SELECT id, window_title FROM frames WHERE id IN ({','.join('?' * len(ids))})", ids)}
+    def returned(r):
+        shown = [esc((titles.get(i) or "")[:80]) for i in r["frame_ids"][:5] if titles.get(i)]
+        return f'{r["result_count"]}' + (f'<div class="muted">{"<br>".join(shown)}</div>' if shown else "")
+    return head + table(
+        [(x("ui.col.time"), False), (x("ui.col.who"), False), (x("ui.col.action"), False), (x("ui.col.query"), False), (x("ui.col.returned"), True)],
+        [(datetime.fromtimestamp(r["ts"]).strftime("%m-%d %H:%M"), f'{esc(r["client"])} <span class="muted">{esc(r["path"])}</span>',
+          esc(r["action"]), esc(r["query"] or ""), returned(r)) for r in rows]) + "</section>"
+
+
+def clients(settings, lang):
+    """MCP clients with their profile ceiling; revoke here, approve in the app (needs re-authentication)."""
+    from . import access as tokens
+    x = Text(lang)
+    rows = tokens.clients(settings)
+    if not rows: return f'<section><h2>{x("ui.clients.title")}</h2><p>{x("ui.clients.none")}</p></section>'
+    when = lambda ts: datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "–"
+    def actions(c):
+        out = ""
+        if c["state"] == "pending": out += f'<div class="muted">{x("ui.clients.pending", name=c["name"])}</div>'
+        if c["state"] != "revoked":
+            out += f'<button type="button" class="small" data-action="revoke" data-param-name="{esc(c["name"])}">{x("ui.clients.revoke")}</button>'
+        return out
+    return (f'<section><h2>{x("ui.clients.title")}</h2>' + table(
+        [(x("ui.col.name"), False), (x("ui.col.profile"), False), (x("ui.col.state"), False), (x("ui.col.last_used"), False), ("", False)],
+        [(esc(c["name"]), esc(c["profile"]), x("ui.state." + c["state"]), when(c["last_used"]), actions(c)) for c in rows]) + "</section>")
