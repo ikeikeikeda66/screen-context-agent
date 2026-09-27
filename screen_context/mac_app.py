@@ -6,7 +6,7 @@ from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMen
 from Foundation import NSObject, NSDate, NSDefaultRunLoopMode
 from . import quick, reauth
 from .config import Settings
-from .i18n import CHOICES, interval_label, resolve, t
+from .i18n import CHOICES, auth, interval_label, resolve, t
 
 INTERVALS = (5, 15, 30, 60, 120, 300)
 
@@ -39,7 +39,7 @@ class MenuController(NSObject):
         lang = self.lang()
         try:
             status = quick.open_today(self.settings, lambda: reauth.touch_id(t("auth.reason.open", lang)))
-            if status in (reauth.FAILED, reauth.UNAVAILABLE): self.showError(t("auth.refused." + status, lang))
+            if status in (reauth.FAILED, reauth.UNAVAILABLE): self.showError(auth("auth.refused." + status, lang))
         except Exception as error: self.showError(t("error.open", lang, error=type(error).__name__))
 
     def deleteRecent_(self, sender):

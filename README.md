@@ -115,7 +115,7 @@ Tabs next to Today put the maintenance commands on the same screen. Each one run
 - **Access log**: what each assistant asked for and which screens it received. Choose "All" to include your own reads and changes.
 - **Clients**: each MCP client, its allowed profile and when it last read your history. Approve a waiting client or revoke one here.
 
-Exporting a time range as a plaintext file, making a backup, and approving a new client also ask for Touch ID (or your login password). The menu bar app shows the prompt, so it must be running; without it, or when you cancel, nothing changes. Erasing and restoring stay in the terminal (`screen-context wipe`, `screen-context restore FILE`) because the app has to be quit for them. Windows cannot ask yet, so these three changes are refused in its UI; use the CLI there. `screen-context ui` from the terminal does not ask for Touch ID: the terminal can already read the history.
+Exporting a time range as a plaintext file, making a backup, and approving a new client also ask for Touch ID (or your login password). The menu bar app shows the prompt, so it must be running; without it, or when you cancel, nothing changes. Erasing and restoring stay in the terminal (`screen-context wipe`, `screen-context restore FILE`) because the app has to be quit for them. On Windows, the capture worker asks with Windows Hello (face, fingerprint or PIN), or for your Windows sign-in password when Hello is not set up; start capture in the control window first. `screen-context ui` from the terminal does not ask: the terminal can already read the history.
 
 The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
 
@@ -302,7 +302,7 @@ screen-context push DATE                send one day to a local OpenViking serve
 
 ## Windows (beta)
 
-The Windows version has a control window (start, pause, stop, language, MCP client setup) and the same CLI. It passes the automated tests and was checked on one Windows 11 23H2 machine (single monitor, 96 DPI): capture and OCR, client approval, schema migration, checkout exclusion in Edge, and backup, wipe and restore with Credential Manager.
+The Windows version has a control window (start, pause, stop, Open Today…, Delete Recent, language, MCP client setup) and the same CLI. Open Today… asks for Windows Hello or your sign-in password first, as on macOS. It passes the automated tests and was checked on one Windows 11 23H2 machine (single monitor, 96 DPI): capture and OCR, client approval, schema migration, checkout exclusion in Edge, and backup, wipe and restore with Credential Manager.
 
 Not yet covered: other DPI settings and multiple monitors, Chrome password fields, a UAC prompt while capture runs, and the contacts app in the default exclusions ([#25](https://github.com/ikeikeikeda66/screen-context-agent/issues/25)). Capture skips a locked session to avoid a crash in the capture library ([#47](https://github.com/ikeikeikeda66/screen-context-agent/issues/47)). Please report problems, with your Windows version and display setup, in Issues.
 

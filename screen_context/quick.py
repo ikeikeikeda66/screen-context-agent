@@ -1,6 +1,8 @@
-"""Menu bar shortcuts (#31): delete what was just recorded, and open the Today view.
+"""Menu bar and control window shortcuts (#31, #33): delete what was just recorded, and open the
+Today view.
 
-Kept free of AppKit so it can be tested anywhere; mac_app.py only adds the menu and dialogs.
+Kept free of AppKit and tkinter so it can be tested anywhere; mac_app.py and windows_app.py only
+add the menu or buttons and the dialogs.
 The quick purge is `screen-context purge --last Nm --yes`: the same selective purge path, which
 also removes unindexed spool files in the window. The Today view runs as its own process
 (`screen-context ui`), so it never shares a process with capture.
@@ -39,11 +41,28 @@ def delete(settings, minutes):
     return purge.run(settings, last=f"{minutes}m", apply=True, actor="app")
 
 
+def delete_recent(settings, minutes, lang, ask, tell):
+    """The whole quick purge for a window without a menu bar (Windows): `ask(title, body)` must
+    return True to delete; `tell(text)` shows the outcome. Returns the purge result, or None."""
+    title, body = confirmation(settings, minutes, lang)
+    if body is None:
+        tell(title)
+        return None
+    if not ask(title, body): return None
+    result = delete(settings, minutes)
+    tell(t("menu.delete.done", lang, frames=result["frames"]))
+    return result
+
+
 def ui_command():
     """The command that starts the Today view. In the app bundle, py2app's launcher (EXECUTABLEPATH)
-    with an argument runs the CLI instead of the menu bar (packaging/mac_main.py)."""
+    with an argument runs the CLI instead of the menu bar (packaging/mac_main.py). The frozen Windows
+    control window starts the CLI executable next to it."""
     launcher = os.environ.get("EXECUTABLEPATH")
     if getattr(sys, "frozen", None) == "macosx_app" and launcher: return [launcher, "ui"]
+    if sys.platform == "win32":
+        from .windows_app import cli_command
+        return [*cli_command(), "ui"]
     return [sys.executable, "-m", "screen_context.cli", "ui"]
 
 
@@ -56,6 +75,8 @@ def open_today(settings, authenticate, spawn=subprocess.Popen):
     if status != VERIFIED: return status
     env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root)}
     if settings.plaintext: env["SCREEN_CONTEXT_PLAINTEXT"] = "1"
+    # Windows: no console window for the CLI; start_new_session is POSIX only and ignored there.
+    extra = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # CREATE_NO_WINDOW
     spawn(ui_command(), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-          stderr=subprocess.DEVNULL, start_new_session=True)
+          stderr=subprocess.DEVNULL, start_new_session=True, **extra)
     return status

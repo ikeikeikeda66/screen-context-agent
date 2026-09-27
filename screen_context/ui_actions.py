@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from . import access, exclusions, export, lifecycle, purge
-from .i18n import t
+from .i18n import auth, t
 
 
 def set_paused(settings, paused):
@@ -136,7 +136,7 @@ def prepare_export(settings, body, lang):
     if fmt not in ("jsonl", "md", "csv"): raise ValueError("format: jsonl, md or csv")
     params = {"since": since, "until": until, "format": fmt, "exclude_ide": body.get("exclude_ide") is True}
     frames = len(export.frames(settings, since, until, params["exclude_ide"]))
-    return params, t("ui.export.confirm", lang, frames=frames, format=fmt) + "\n\n" + t("ui.reauth.note", lang)
+    return params, t("ui.export.confirm", lang, frames=frames, format=fmt) + "\n\n" + auth("ui.reauth.note", lang)
 
 
 def run_export(settings, params, lang):
@@ -158,7 +158,7 @@ def prepare_backup(settings, body, lang):
     if not isinstance(passphrase, str) or len(passphrase) < lifecycle.MIN_PASSPHRASE:
         raise ValueError(f"passphrase: at least {lifecycle.MIN_PASSPHRASE} characters")
     if passphrase != again: raise ValueError(t("ui.backup.mismatch", lang))
-    return {"path": str(target), "passphrase": passphrase}, t("ui.backup.confirm", lang, path=target) + "\n\n" + t("ui.reauth.note", lang)
+    return {"path": str(target), "passphrase": passphrase}, t("ui.backup.confirm", lang, path=target) + "\n\n" + auth("ui.reauth.note", lang)
 
 
 def run_backup(settings, params, lang):
@@ -172,7 +172,7 @@ def prepare_approve(settings, body, lang):
     name = text(body, "name", 64)
     client = next((c for c in access.clients(settings) if c["name"] == name and c["state"] == "pending"), None)
     if client is None: raise ValueError("No client with that name is waiting for approval")
-    return {"name": name}, t("ui.clients.approve_confirm", lang, name=name, profile=client["profile"]) + "\n\n" + t("ui.reauth.note", lang)
+    return {"name": name}, t("ui.clients.approve_confirm", lang, name=name, profile=client["profile"]) + "\n\n" + auth("ui.reauth.note", lang)
 
 
 def run_approve(settings, params, lang):

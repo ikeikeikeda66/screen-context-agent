@@ -10,6 +10,8 @@ The Windows version is **beta**. Capture, OCR and the control window are impleme
 - The last capture and OCR results are shown separately from whether the workers are running.
 - **Language** switches all text in the window between System Default, English and 日本語.
 - **Show MCP Client Setup** shows the entry for the selected MCP client, with absolute paths. It does not change any client configuration.
+- **Open Today…** asks for Windows Hello (face, fingerprint or PIN), or for your Windows sign-in password when Hello is not set up, then opens the Today view (`screen-context ui`) in your browser. The UI session ends after 5 idle minutes or when the screen locks.
+- **Delete Recent** deletes what was recorded in the last 5 minutes, 15 minutes or hour, including frames not processed yet. It shows how many screens and which assistants already received them, and asks with No as the default. It runs the same code as `screen-context purge --last`.
 - Closing the window stops capture. Minimizing keeps it running. Tray icon and start at login are not implemented yet.
 - A lock on the data folder prevents a second instance.
 
@@ -77,5 +79,15 @@ Use this list when you test a build on real hardware:
 6. The window and CLI start from a path with spaces and non-ASCII characters, and an MCP client connects over stdio.
 7. The frozen build does not spawn extra windows or processes, and closing the window ends all workers.
 8. Credential Manager, NTFS permissions and code signing are checked before wider distribution.
+
+### Phase 2 (Today view, #33)
+
+9. **Open Today…** shows the Windows Hello prompt in front of other windows. The browser opens only after it is confirmed; Cancel opens nothing.
+10. On an account without Windows Hello, the sign-in password prompt appears instead. A wrong password, or another account's password, opens nothing.
+11. In the UI, export, backup and approving a client show the same prompt, asked by the capture worker, so capture must be started. With capture stopped, the UI refuses them and says to start capture.
+12. Locking the screen (Win+L) ends the UI session: the page asks for a new link after unlocking.
+13. The Today view, search, the "Where you left off" card and the control tabs (Data, Access log, Clients) work, and the UI's own pages are not recorded.
+14. **Delete Recent** → Last 5 min deletes only frames from that window, including ones still in the spool; No deletes nothing.
+15. The frozen build starts `screen-context.exe ui` without a console window, and the UI process exits when its session ends.
 
 Before and after each capture, ScreenContext compares the window handle, process ID, process start time and title, and discards the image if any changed. This does not detect content that changes inside the same window and title.

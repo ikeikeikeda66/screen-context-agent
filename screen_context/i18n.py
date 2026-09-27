@@ -24,8 +24,10 @@ MESSAGES = {
         "auth.reason.export": "export your screen history as a plaintext file",
         "auth.reason.backup": "back up your screen history",
         "auth.reason.approve": "let a new assistant read your screen history",
-        "auth.refused.failed": "Touch ID or your password was not confirmed.",
-        "auth.refused.unavailable": "This Mac cannot ask for Touch ID or your password right now.",
+        "auth.check.mac": "Touch ID or your password",
+        "auth.check.windows": "Windows Hello or your Windows password",
+        "auth.refused.failed": "{check} was not confirmed.",
+        "auth.refused.unavailable": "This computer cannot ask for {check} right now.",
         "menu.delete": "Delete Recent",
         "menu.delete.item": "Last {span}…",
         "menu.span.minutes": "{n} min",
@@ -171,12 +173,12 @@ MESSAGES = {
         "ui.state.pending": "waiting for approval",
         "ui.state.denied": "not allowed",
         "ui.state.revoked": "revoked",
-        "ui.reauth.cancelled": "Cancelled. This change needs your Touch ID or password.",
-        "ui.reauth.failed": "Not changed: Touch ID or your password was not confirmed.",
-        "ui.reauth.unavailable": "Not changed: this needs Touch ID or your password, which the ScreenContext app on this computer cannot ask for yet. Use the terminal instead.",
-        "ui.reauth.no_app": "Not changed: open the ScreenContext app. It asks for your Touch ID or password.",
-        "ui.reauth.timeout": "Not changed: no answer to the Touch ID or password prompt in time.",
-        "ui.reauth.note": "You will be asked for Touch ID or your password.",
+        "ui.reauth.cancelled": "Cancelled. This change needs {check}.",
+        "ui.reauth.failed": "Not changed: {check} was not confirmed.",
+        "ui.reauth.unavailable": "Not changed: this needs {check}, which the ScreenContext app on this computer cannot ask for. Use the terminal instead.",
+        "ui.reauth.no_app": "Not changed: open the ScreenContext app and start capture. It asks for {check}.",
+        "ui.reauth.timeout": "Not changed: {check} was not given in time.",
+        "ui.reauth.note": "You will be asked for {check}.",
         "ui.export.title": "Export",
         "ui.export.format": "Format",
         "ui.export.ide": "Leave out IDE and terminal windows",
@@ -295,8 +297,10 @@ MESSAGES = {
         "auth.reason.export": "画面履歴を平文のファイルに出力する",
         "auth.reason.backup": "画面履歴をバックアップする",
         "auth.reason.approve": "新しいアシスタントに画面履歴の閲覧を許可する",
-        "auth.refused.failed": "Touch ID またはパスワードを確認できませんでした。",
-        "auth.refused.unavailable": "この Mac では現在、Touch ID やパスワードを確認できません。",
+        "auth.check.mac": "Touch ID またはパスワード",
+        "auth.check.windows": "Windows Hello または Windows のパスワード",
+        "auth.refused.failed": "{check}を確認できませんでした。",
+        "auth.refused.unavailable": "このコンピュータでは現在、{check}を確認できません。",
         "menu.delete": "直近の記録を削除",
         "menu.delete.item": "直近{span}…",
         "menu.span.minutes": "{n}分",
@@ -441,12 +445,12 @@ MESSAGES = {
         "ui.state.pending": "承認待ち",
         "ui.state.denied": "不許可",
         "ui.state.revoked": "失効済み",
-        "ui.reauth.cancelled": "キャンセルしました。この変更には Touch ID またはパスワードが必要です。",
-        "ui.reauth.failed": "変更していません：Touch ID またはパスワードを確認できませんでした。",
-        "ui.reauth.unavailable": "変更していません：Touch ID またはパスワードでの確認が必要ですが、この PC の ScreenContext アプリはまだ確認できません。ターミナルで実行してください。",
-        "ui.reauth.no_app": "変更していません：ScreenContext アプリを起動してください。アプリが Touch ID またはパスワードを確認します。",
-        "ui.reauth.timeout": "変更していません：Touch ID またはパスワードの確認に時間内の応答がありませんでした。",
-        "ui.reauth.note": "Touch ID またはパスワードでの確認があります。",
+        "ui.reauth.cancelled": "キャンセルしました。この変更には{check}での確認が必要です。",
+        "ui.reauth.failed": "変更していません：{check}を確認できませんでした。",
+        "ui.reauth.unavailable": "変更していません：{check}での確認が必要ですが、このコンピュータの ScreenContext アプリでは確認できません。ターミナルで実行してください。",
+        "ui.reauth.no_app": "変更していません：ScreenContext アプリを起動し、撮影を開始してください。アプリが{check}で確認します。",
+        "ui.reauth.timeout": "変更していません：{check}での確認が時間内に行われませんでした。",
+        "ui.reauth.note": "{check}での確認があります。",
         "ui.export.title": "出力",
         "ui.export.format": "形式",
         "ui.export.ide": "IDE とターミナルの画面を除く",
@@ -594,6 +598,12 @@ def resolve(settings=None):
 def t(key, lang="en", **values):
     text = MESSAGES.get(lang, MESSAGES["en"]).get(key) or MESSAGES["en"][key]
     return text.format(**values) if values else text
+
+
+def auth(key, lang="en", **values):
+    """A message about re-authentication, naming this platform's check (Touch ID or Windows Hello)."""
+    check = t("auth.check." + ("windows" if sys.platform == "win32" else "mac"), lang)
+    return t(key, lang, check=check, **values)
 
 
 def interval_label(seconds, lang):

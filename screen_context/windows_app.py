@@ -18,16 +18,16 @@ def main():
     from .clients import CLIENTS, render
     from .config import Settings
     from .desktop import Workers, status_text
-    from .i18n import CHOICES, resolve, t
+    from .i18n import CHOICES, auth, resolve, t
     from .locking import lock
-    from . import store
+    from . import quick, reauth, store
 
     settings = Settings.environment()
     lang = lambda: resolve(settings)
     root = tk.Tk()
     root.title(t("win.title", lang()))
-    root.geometry("670x470")
-    root.minsize(600, 440)
+    root.geometry("670x520")
+    root.minsize(600, 490)
     if settings.plaintext:
         messagebox.showerror(t("win.plaintext.title", lang()), t("win.plaintext.body", lang()))
         root.destroy()
@@ -123,6 +123,37 @@ def main():
         client.trace_add("write", update)
         update()
 
+    def open_today():
+        """Windows Hello (or the sign-in password) first; the UI starts only when verified (#33)."""
+        current = lang()
+        try:
+            # Asked from this window's thread: the prompt is modal and keeps its own messages moving.
+            status = quick.open_today(settings, lambda: reauth.windows(t("auth.reason.open", current)))
+            if status in (reauth.FAILED, reauth.UNAVAILABLE):
+                messagebox.showerror(t("win.title", current), auth("auth.refused." + status, current))
+        except Exception as error:
+            messagebox.showerror(t("win.title", current), t("error.open", current, error=type(error).__name__))
+
+    def delete_recent(minutes):
+        """Quick purge, the same path as the macOS menu (#31, #33). Cancel is the default answer."""
+        current = lang()
+        try:
+            quick.delete_recent(settings, minutes, current,
+                                lambda title, body: messagebox.askyesno(title, body, icon="warning", default="no"),
+                                lambda text: messagebox.showinfo(t("win.title", current), text))
+        except Exception as error:
+            messagebox.showerror(t("win.title", current), t("error.purge", current, error=type(error).__name__))
+
+    delete_menu = tk.Menu(root, tearoff=False)
+
+    def show_delete_menu():
+        current = lang()
+        delete_menu.delete(0, "end")
+        for minutes in quick.WINDOWS:
+            delete_menu.add_command(label=t("menu.delete.item", current, span=quick.span(minutes, current)),
+                                    command=lambda m=minutes: delete_recent(m))
+        delete_menu.tk_popup(delete_button.winfo_rootx(), delete_button.winfo_rooty() + delete_button.winfo_height())
+
     start_button = ttk.Button(buttons, command=start)
     start_button.pack(side="left", padx=3)
     texts.append((start_button, "win.start", {}))
@@ -131,6 +162,14 @@ def main():
     stop_button = ttk.Button(buttons, command=workers.stop)
     stop_button.pack(side="left", padx=3)
     texts.append((stop_button, "win.stop", {}))
+    shortcuts = ttk.Frame(body)
+    shortcuts.pack(anchor="w", pady=(0, 12))
+    today_button = ttk.Button(shortcuts, command=open_today)
+    today_button.pack(side="left", padx=3)
+    texts.append((today_button, "menu.open_today", {}))
+    delete_button = ttk.Button(shortcuts, command=show_delete_menu)
+    delete_button.pack(side="left", padx=3)
+    texts.append((delete_button, "menu.delete", {}))
     connection_button = ttk.Button(body, command=show_connection)
     connection_button.pack(anchor="w")
     texts.append((connection_button, "win.connection", {}))

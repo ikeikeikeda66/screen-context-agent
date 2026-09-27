@@ -1401,6 +1401,7 @@ windows = [
     { name = "winrt-windows-globalization" },
     { name = "winrt-windows-graphics-imaging" },
     { name = "winrt-windows-media-ocr" },
+    { name = "winrt-windows-security-credentials-ui" },
     { name = "winrt-windows-storage" },
     { name = "winrt-windows-storage-streams" },
 ]
@@ -1428,6 +1429,7 @@ requires-dist = [
     { name = "winrt-windows-globalization", marker = "extra == 'windows'" },
     { name = "winrt-windows-graphics-imaging", marker = "extra == 'windows'" },
     { name = "winrt-windows-media-ocr", marker = "extra == 'windows'" },
+    { name = "winrt-windows-security-credentials-ui", marker = "extra == 'windows'" },
     { name = "winrt-windows-storage", marker = "extra == 'windows'" },
     { name = "winrt-windows-storage-streams", marker = "extra == 'windows'" },
 ]
@@ -1746,6 +1748,29 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/81/ab/2542c775fda7ebca4629736d73d59c28fe3b5cd56ddfccb6b5e1f1232153/winrt_windows_media_ocr-3.2.1-cp314-cp314-win32.whl", hash = "sha256:c67fa675947e40f13c58ef4a1c49f8c779d3e6f1fdc91733a506a5e41ebf0007", size = 42227, upload-time = "2025-09-20T07:14:42.207Z" },
     { url = "https://files.pythonhosted.org/packages/f0/ce/719e981c55cec68feab1fab2e5012938c0846247ba3af30face2ca41a3ad/winrt_windows_media_ocr-3.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:31a620f6704cf8a27bc38a5e4f7a7888c935aecc5443c6dfbfddca331259e2af", size = 43578, upload-time = "2025-09-20T07:14:42.936Z" },
     { url = "https://files.pythonhosted.org/packages/d4/52/c39c0d5cc1e9f506a09b28ad40c51a183cf62e454dc30fa17c1ef16554e5/winrt_windows_media_ocr-3.2.1-cp314-cp314-win_arm64.whl", hash = "sha256:e731cf200a4731f53c0e40fba72e0312e895f80ab4e3574dc45ef3b1e35509ef", size = 40765, upload-time = "2025-09-20T07:14:43.679Z" },
+]
+
+[[package]]
+name = "winrt-windows-security-credentials-ui"
+version = "3.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "winrt-runtime" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/e4/231502379b5b1428a4eed4a306034fc84e2809a0e9cd2f0ebfc864af1f77/winrt_windows_security_credentials_ui-3.2.1.tar.gz", hash = "sha256:51e3c8182cd558123c4b4eb321692e78be38dc84e43d2d1aebe95415b3c74071", size = 8630, upload-time = "2025-06-06T14:43:06.776Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/da/cf5986b676a1b56a746f28ca642c0824ca1a62178eb33052feea96bf98b4/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win32.whl", hash = "sha256:ab1fc909d9bd8fb1877587598a4df95b73aebbad9f3e43f6b83ed7f9e50ae03b", size = 40567, upload-time = "2025-06-06T13:56:11.457Z" },
+    { url = "https://files.pythonhosted.org/packages/24/7c/2879d246b85e84f01d8fe482f4a28abae6983ae93d1d6017c9b1f76c8402/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:71bbafdcc0390953bfbf96a1afd5b2468208fe76cfc13feba4f9b80afabd1726", size = 44255, upload-time = "2025-06-06T13:56:12.414Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/f8/b5136b353da0f3f309a365cbe879f37409ea0d041dc4e5f68db414ed20b0/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win_arm64.whl", hash = "sha256:5adb5f26009d0ebe416f623b74fa6a80ff4798c9daf7f6c08b2edc3da7c701a8", size = 39583, upload-time = "2025-06-06T13:56:13.523Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/95/d3fb570ec66f4f7277593ebcd9f26aae724e34a9263309e0bc53b14a517f/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win32.whl", hash = "sha256:6d722644b3cf1616b884f1f9624c999643528bd1adfd7f62a83773dac643aea0", size = 40649, upload-time = "2025-06-06T13:56:14.255Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/b2/4a624aca886207c10bc9f524ee45f53063c0115d6c483ebaee9b72f7e6f9/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:0af712c9a014e4b683cd6aa8e006edb758e08f8e03c6092c697b8e2cd3e8040d", size = 44137, upload-time = "2025-06-06T13:56:14.996Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/56/d4070306b11be25266b21a1aaea44be664998637cb29504ec7c160d03bd1/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:ce563731240d36c02379c7f50d072603c471c10fad909c3cd72aa72f08d228a7", size = 39570, upload-time = "2025-06-06T13:56:15.74Z" },
+    { url = "https://files.pythonhosted.org/packages/be/63/08c59b89bd273210c68da38bc5ea8550b4b19301e2cc1fff84a0736e0c7b/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win32.whl", hash = "sha256:b2b7e9c0df9e42ea6695cc89e53543ffb8999fee9e80ec40ecc9c599ca80107e", size = 40655, upload-time = "2025-06-06T13:56:16.572Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/35/fd661aa8a65ec7d7a6bda8ca06508ffc6b7263d1b947de37856c81a46a2f/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:ae1b757d8bb13a30c4ac6732c4cba3128a55f5126a4496f96d8f513837d30406", size = 44142, upload-time = "2025-06-06T13:56:17.305Z" },
+    { url = "https://files.pythonhosted.org/packages/db/55/3f42d0519b61b60f7a8a77fa807acbf46bb62675078033e383fc59947313/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:aa13db73b4ed9004527636271cabfe216d461c8274e97de8ee0021432d636a70", size = 39564, upload-time = "2025-06-06T13:56:18.285Z" },
+    { url = "https://files.pythonhosted.org/packages/70/27/fa8a167fea60dec204d250372f36a07c10696617e536a91a55866127db65/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win32.whl", hash = "sha256:31a34701e3b7ececf1d592535ffaaffff393fb44654b4c71e1dd46992ad012bb", size = 41968, upload-time = "2025-09-20T07:16:12.817Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/3f/3b847694def127ea8dd012d270e89ea64eb5baacde2626ed7b8f5567dd1c/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:fafec6121b65ddcd3d2e0ebd3b2f729a0a8db2eaff0427e5c12a46c36cd1498a", size = 45287, upload-time = "2025-09-20T07:16:13.6Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/a8/bcd55a1ef43ab7ec91025c3b9f79b510d34969ecb703082f92bf7358230f/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win_arm64.whl", hash = "sha256:a5874c9876de1bb99601718be3effbead759d607f14f6b6edbee15bcc046190b", size = 40873, upload-time = "2025-09-20T07:16:14.941Z" },
 ]
 
 [[package]]

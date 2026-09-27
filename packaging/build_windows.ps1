@@ -5,7 +5,7 @@ $PythonExe = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
 if (!(Test-Path $PythonExe)) { throw 'Create .venv and install the Windows dependencies first.' }
 Push-Location $ProjectRoot
 try {
-    & $PythonExe -c 'import tkinter, windows_capture, sqlcipher3.dbapi2, keyring.backends.Windows; from winrt.windows.media.ocr import OcrEngine'
+    & $PythonExe -c 'import tkinter, windows_capture, sqlcipher3.dbapi2, keyring.backends.Windows; from winrt.windows.media.ocr import OcrEngine; from winrt.windows.security.credentials.ui import UserConsentVerifier'
     if ($LASTEXITCODE -ne 0) { throw 'Packaging dependencies are missing.' }
     & $PythonExe -c "import inspect; from windows_capture import WindowsCapture; assert 'window_hwnd' in inspect.signature(WindowsCapture).parameters, 'Exact HWND capture is required'"
     if ($LASTEXITCODE -ne 0) { throw 'A windows-capture version with window_hwnd support is required.' }

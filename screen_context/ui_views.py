@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import quote
 from . import material, sessions, store
-from .i18n import t
+from .i18n import auth, t
 from .privacy import SELF_TITLE
 from .service import Service
 
@@ -265,12 +265,12 @@ def data(settings, lang, query):
             f'<label>{x("ui.export.format")}<select name="format"><option value="md">Markdown</option><option value="jsonl">JSON Lines</option>'
             f'<option value="csv">CSV</option></select></label>'
             f'<label class="check"><input type="checkbox" name="exclude_ide"> {x("ui.export.ide")}</label>'
-            f'<button type="submit">{x("ui.export.button")}</button><span class="note">{x("ui.reauth.note")}</span></form></section>'
+            f'<button type="submit">{x("ui.export.button")}</button><span class="note">{esc(auth("ui.reauth.note", x.lang))}</span></form></section>'
             f'<section id="backup"><h2>{x("ui.backup.title")}</h2><form class="stack" data-write="backup" autocomplete="off">'
             f'<label>{x("ui.backup.path")}<input type="text" name="path" required value="{esc(backup_path())}"></label>'
             f'<label>{x("ui.backup.passphrase")}<input type="password" name="passphrase" minlength="12" required autocomplete="new-password"></label>'
             f'<label>{x("ui.backup.again")}<input type="password" name="again" minlength="12" required autocomplete="new-password"></label>'
-            f'<button type="submit">{x("ui.backup.button")}</button><span class="note">{x("ui.reauth.note")}</span></form></section>'
+            f'<button type="submit">{x("ui.backup.button")}</button><span class="note">{esc(auth("ui.reauth.note", x.lang))}</span></form></section>'
             f'<section><h2>{x("ui.cli.title")}</h2><p>{x("ui.cli.body")}</p><pre>screen-context wipe\nscreen-context restore FILE</pre></section>')
 
 

@@ -27,7 +27,7 @@ import json
 from starlette.concurrency import run_in_threadpool
 from . import audit, material, reauth as work_reauth, sessions as work_sessions, ui_actions, ui_views as views
 from .health import screen_locked
-from .i18n import resolve, t
+from .i18n import auth, resolve, t
 from .service import Service
 
 IDLE = 300
@@ -309,7 +309,7 @@ def create_app(settings, sessions, port, reauthenticate=None):
                 if status != work_reauth.VERIFIED:
                     audit.record(settings, "user", CLIENT, "ui.reauth", params={"action": action, "status": status})
                     known = status in (work_reauth.CANCELLED, work_reauth.UNAVAILABLE, work_reauth.NO_APP, work_reauth.TIMEOUT)
-                    return JSONResponse({"error": t("ui.reauth." + (status if known else work_reauth.FAILED), lang)}, 403)
+                    return JSONResponse({"error": auth("ui.reauth." + (status if known else work_reauth.FAILED), lang)}, 403)
             result = run(settings, params, lang)
         except PermissionError as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 403)
         except (ValueError, OSError) as error: return JSONResponse({"error": t("ui.error", lang, error=error)}, 400)
