@@ -8,17 +8,28 @@ Ask your assistant things like "find the error message I was looking at in the b
 
 | Platform | Status |
 |---|---|
-| macOS 14+ | Supported (menu bar app + CLI) |
-| Windows 10/11 | **Beta** (control window + CLI). Not yet validated on a wide range of hardware. |
+| macOS 14+ | Supported (menu bar app + CLI). Built from source; there is no notarized download. |
+| Windows 10/11 | **Beta** (control window + CLI). Checked on one Windows 11 machine; see [Windows (beta)](#windows-beta). |
 
-License: [MIT](LICENSE)
+Current version: **0.2.0**. Changes: [CHANGELOG.md](CHANGELOG.md). License: [MIT](LICENSE).
+
+## What 0.2 adds
+
+0.2 is about trust: you decide which assistants may read your history, what is never recorded, and how long anything is kept.
+
+- **Per-client access**: each MCP client gets its own token and must be approved once in the app. You can list clients, see what each one read, and revoke any of them.
+- **Audit log**: every query, with the frames it returned, is recorded in the encrypted database. Only you can read it (CLI), never an assistant.
+- **Sensitive input is not stored**: card numbers and My Number drop the whole frame; a name next to an address, phone number, date of birth or e-mail address is redacted. Contacts and checkout pages are excluded by default.
+- **Data control**: purge by time, app or keyword; retention limits; usage report; full wipe; passphrase-protected backup and restore; export of a time range.
+
+Upgrading from 0.1 takes a few steps: see [Upgrading from 0.1](#upgrading-from-01).
 
 ## How it works
 
 Three processes, each with a narrow job:
 
 1. **Capture** (menu bar app on macOS, control window on Windows) captures only the foreground window at native resolution. Similar frames are skipped with a perceptual hash. Frames go to an encrypted spool.
-2. **Indexer** runs OCR (Apple Vision on macOS, `Windows.Media.Ocr` on Windows), applies your exclusion policy, and stores text in an SQLCipher database with a trigram FTS5 index.
+2. **Indexer** runs OCR (Apple Vision on macOS, `Windows.Media.Ocr` on Windows), applies your exclusion and sensitive-input rules, and stores text in an SQLCipher database with a trigram FTS5 index.
 3. **MCP server** (`screen-context serve`) is started by your MCP client. It never imports capture code, reads screen data only (it writes nothing but audit rows and proposals), requires a per-client token, and labels every result as untrusted observed data.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -31,6 +42,8 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/R
 
 ## Quick start (macOS)
 
+**1. Install and create the encrypted store**
+
 ```sh
 git clone https://github.com/ikeikeikeda66/screen-context-agent.git
 cd screen-context-agent
@@ -38,26 +51,33 @@ uv sync --locked --extra macos --extra encrypted --extra dev
 .venv/bin/screen-context init
 ```
 
-`init` creates `~/Library/Application Support/ScreenContext` and stores a random encryption key in the macOS Keychain. If you lose the key, the history cannot be decrypted.
+`init` creates `~/Library/Application Support/ScreenContext` and stores a random encryption key in the macOS Keychain. If you lose the key, the history cannot be decrypted; `screen-context backup` keeps a passphrase-protected copy.
 
-Start the indexer in one terminal:
+**2. Start the indexer**
 
 ```sh
 .venv/bin/screen-context index --watch
 ```
 
-Build and start the menu bar app. macOS grants Screen Recording permission to the app bundle, so capture runs from the app, not from the terminal:
+To start it at login instead, see [packaging/macos/README.md](packaging/macos/README.md).
+
+**3. Build, sign and start the menu bar app**
+
+macOS grants Screen Recording permission to a signed app, so capture runs from the app, not from the terminal. Sign every build with the same identity and the permission survives rebuilds:
 
 ```sh
-# "-" makes an ad-hoc signature for local use. Use a Developer ID identity
-# to keep the Screen Recording permission across rebuilds.
-SCREEN_CONTEXT_SIGN_IDENTITY=- sh packaging/build_mac.sh
+sh packaging/macos/signing_identity.sh      # once per Mac: a self-signed identity in your login keychain
+SCREEN_CONTEXT_SIGN_IDENTITY="ScreenContext Local Signing" sh packaging/build_mac.sh
 open dist/ScreenContext.app
 ```
 
-Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, then open the app again. To start the indexer at login, see [packaging/macos/README.md](packaging/macos/README.md).
+Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, then open the app again. After a rebuild, macOS may ask once whether `codesign` may use the signing key; choose Always Allow.
 
-For a one-time test with the terminal's own permission: `.venv/bin/screen-context capture --once`.
+- A Developer ID identity works the same way. `SCREEN_CONTEXT_SIGN_IDENTITY=-` (ad hoc) also builds, but the permission must be granted again after every rebuild.
+- The app is not notarized. Build it on the Mac that runs it: a copy downloaded or moved from another Mac is blocked by Gatekeeper.
+- To try capture once with the terminal's own permission: `.venv/bin/screen-context capture --once`.
+
+**4. Connect your assistant**: see [Connect an MCP client](#connect-an-mcp-client).
 
 ### Menu bar
 
@@ -84,11 +104,17 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
-The client starts the server itself over stdio. Run `init` first: each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, so the old entry stops working. The first time a new token is used, the menu bar app (or the Windows control window) asks whether that client may read your screen history; the app must be running, or approve it with `screen-context clients approve NAME`. `screen-context clients list` shows the clients and when each last read your history; `clients revoke NAME` cuts one off at its next call. Per-client instructions and the HTTP transport are in [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
+The client starts the server itself over stdio. How access works:
+
+1. Each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, and the old entry stops working.
+2. The first time a new token is used, the menu bar app (or the Windows control window) asks whether that client may read your screen history. Keep the app running, or approve from the terminal with `screen-context clients approve NAME`. Don't Allow refuses that token for good.
+3. `screen-context clients list` shows each client and when it last read your history. `clients revoke NAME` cuts one off at its next call. `screen-context audit list` shows what each client asked for and received.
+
+Per-client instructions and the HTTP transport: [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
 ### Profiles and tools
 
-Each server process runs with one fixed profile. A tool call cannot raise it.
+Each server process runs with one fixed profile. A tool call cannot raise it, and a client's token caps the profile it may use.
 
 | Tool | `standard` (default) | `full` |
 |---|---|---|
@@ -111,7 +137,7 @@ Each server process runs with one fixed profile. A tool call cannot raise it.
 
 Every response and record carries `source=observed_screen` and `trust=untrusted`. This is a label, not a defense against prompt injection: treat screen text as data, never as instructions.
 
-## Privacy and storage
+## What is recorded
 
 Edit `policy.json` in the data folder. It is read again on every capture and every query, so a new exclusion also hides past records from search, activity summaries and images. An invalid policy makes processing fail; it never disables exclusions.
 
@@ -124,18 +150,29 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `ai_output_apps`, `ai_output_title_patterns` | Frames showing an assistant's own output. Proposals cannot use them as evidence. |
 | `sensitive_detectors` | Default `card_number` (13–19 digits, issuer prefix, Luhn check) and `my_number` (12 digits with a valid check digit near a 個人番号/マイナンバー label). A frame that matches is dropped whole, text and image, before anything is stored; only the reason is counted. |
 | `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | Default exclusions for the contacts app and for checkout and payment pages (by title or by a `/checkout`, `/payment` or `/billing` path in a visible URL). |
+| `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. |
 
-| `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. Check a text with `screen-context pii-check FILE`. |
+The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information).
 
-The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `[]` to turn that rule off. An invalid rule stops processing instead of being skipped. These rules are risk based: they target input whose leak causes direct harm. They do not define personal information (under Japanese law a name alone can already be personal information). Rules apply to new frames. To apply them to frames recorded earlier, run `screen-context pii-scan` (counts only), then `pii-scan --apply`: matching frames are dropped or redacted exactly as the indexer would today, previews of redacted frames are deleted, and rollups and proposal evidence follow. No undo.
+- `screen-context pii-check FILE` shows which rules a text would trigger.
+- Rules apply to new frames. To apply them to history recorded earlier, run `screen-context pii-scan` (counts only), review the counts, then run `pii-scan --apply`. Matching frames are dropped or redacted exactly as the indexer would today, and previews, rollups and proposal evidence follow. No undo.
+
+## Managing your data
+
+| Task | Command | Notes |
+|---|---|---|
+| Delete something recorded by mistake | `purge --last 15m`, `--from`/`--to`, `--app`, `--keyword`, `--block`, `--excluded` | Selectors combine. Without `--yes` it only reports what would go, including which clients and exports already received those frames. With `--yes` it also deletes previews, spool files in the range, rollup copies, proposal evidence, and the query text and frame IDs in audit rows that returned them. Freed pages are overwritten. No undo. |
+| Limit how long data is kept | `retention --preview 30 --text 365 --audit 365` | Days, or `none` to keep forever. Defaults: previews and OCR boxes 90 days; text, rollups and the audit log until you set a limit. Hourly maintenance applies them with the same cascade as `purge`. |
+| See disk use | `usage` | Previews, database, spool and exports. |
+| See what assistants read | `audit list [--client NAME]`, `audit export` | Client, time, tool, query text, arguments and returned frame IDs. Never served over MCP. `audit export` writes plaintext JSON Lines and is itself logged. |
+| Take data out | `export --from T [--to T] --format jsonl\|md\|csv\|viking` | Policy applied; IDE windows included unless `--exclude-ide`; never overwrites. Audited with frame IDs so a later `purge` warns that a copy exists. An administrator can disable it (`export_allowed`). |
+| Move to another machine | `backup FILE`, then `restore FILE [--replace]` | One archive: a consistent database snapshot, previews and settings, still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `restore` checks the passphrase before writing anything. Without the passphrase the archive cannot be opened. |
+| Erase everything | `wipe` (type `ERASE`) | Deletes the key from the credential store first, which makes every encrypted file unreadable, then the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase. |
+
+Storage details:
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
-- Retention: preview images and OCR bounding boxes are deleted after 90 days; searchable OCR text, daily rollups and the audit log are kept until you set a limit. `screen-context retention --preview 30 --text 365 --audit 365` sets the days (`none` keeps forever), and the hourly maintenance applies them. Expired text is deleted with the same cascade as `purge`. `screen-context usage` shows the space used by previews, the database, the spool and exports.
-- `screen-context purge` deletes frames for good: by time (`--from`/`--to`, or `--last 15m`), `--app`, `--keyword`, one `--block`, or `--excluded` (everything the current policy already hides). Selectors combine. Without `--yes` it only reports what would go, including which clients already received those frames and which of your exports included them. With `--yes` it also deletes the previews, unindexed spool files in the time range, the rollups' copies, proposal evidence that quoted the frames, and the query text and frame IDs in audit rows that returned them. Freed database pages are overwritten. There is no undo. Frames that already left the machine cannot be recalled.
-- The audit log is a table in the encrypted database. For every tool call it records the client, time, tool, query text, other arguments, and the IDs of the frames returned, so you can see what each client read. It is never served over MCP; read it with `screen-context audit list` or `audit export` (plaintext JSON Lines, which is itself logged). `init` imports an older `audit.jsonl` and deletes it.
-- `screen-context backup FILE` writes one archive: a consistent database snapshot, previews and settings, all still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `screen-context restore FILE` asks for the passphrase before writing anything, refuses to overwrite an existing history without `--replace`, and puts the key into the credential store. Use it to move to another machine. Keep the passphrase: without it the archive cannot be opened.
-- `screen-context wipe` (type `ERASE`) deletes the key from the credential store first, which makes every encrypted file unreadable, then deletes the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
 
 ## Threat model
@@ -143,7 +180,7 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 ScreenContext protects against:
 
 - **Someone who has the files but not the key**: a stolen disk, a copied data folder, a synced backup. The database, spool and previews are encrypted, and `backup` archives need their passphrase.
-- **An MCP client reading more than you allowed**: each client has its own token, is approved once by you, is limited to its profile, and can be revoked. The audit log shows what each client asked for and received (`screen-context audit list`).
+- **An MCP client reading more than you allowed**: each client has its own token, is approved once by you, is limited to its profile, and can be revoked. The audit log shows what each client asked for and received.
 - **Recording what should never be kept**: exclusions, the card-number and My Number detectors, the personal-data combination rule, and `purge`.
 
 It does **not** protect against:
@@ -153,6 +190,24 @@ It does **not** protect against:
 - **Instructions shown on screen** (prompt injection). Results are labeled untrusted; clients must treat them as data.
 - **Copies outside the store.** Exports and results already returned to a client are not reached by later exclusions, purges or retention. `purge` tells you when such copies exist.
 - **What OCR or the rules miss.** Detectors are pattern based: a misread card number or an unlabeled name is stored.
+
+## Known limitations
+
+- **macOS distribution**: the app is not notarized, so it must be built on the Mac that runs it (see [Quick start](#quick-start-macos)).
+- **Password fields**: capture is not yet paused while macOS Secure Input is on ([#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)). Password managers are excluded by default, and password fields show masked characters.
+- **Personal-data redaction** depends on OCR. OCR sometimes returns a second, truncated reading of the same line; such a fragment can escape redaction (for example a bare domain from a redacted e-mail address) ([#55](https://github.com/ikeikeikeda66/screen-context-agent/issues/55)).
+- **Windows** is beta: see below.
+
+## Upgrading from 0.1
+
+The database schema, MCP entries and approval flow changed. Existing history is kept.
+
+1. Quit the app and the indexer, and copy the data folder somewhere safe.
+2. Update: `git pull`, then `uv sync --locked --extra macos --extra encrypted --extra dev` (`--extra windows` on Windows).
+3. Run `screen-context init`. It migrates the database to schema v3 and moves the old `audit.jsonl` into the encrypted audit log. Until then, `health` reports `needs_init`.
+4. On macOS, rebuild the app (step 3 of the [Quick start](#quick-start-macos)).
+5. Run `mcp-config` again for every client and replace its ScreenContext entry. Entries from 0.1 no longer start the server. Approve each client at its first call.
+6. Optional: run `screen-context pii-scan`, then `pii-scan --apply`, to apply the new sensitive-input rules to history recorded before 0.2.
 
 ## Configuration
 
@@ -169,38 +224,43 @@ The language can also be set with `screen-context language en|ja|system`.
 ## CLI reference
 
 ```text
+# Setup and workers
 screen-context init                 create the data folder, key and database (also migrates)
 screen-context index [--watch]      OCR and store spooled frames
 screen-context capture [--once]     capture from the terminal (development)
 screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
+screen-context language [system|en|ja]
+
+# MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
 screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
 screen-context clients list | approve NAME | revoke NAME
-screen-context language [system|en|ja]
-screen-context diary-material DATE [--budget 6000] [--lang en|ja]
-screen-context proposal prepare|simulate|finish
-screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
-screen-context wipe                     delete the key, then all data (no undo)
-screen-context usage                    disk space by kind of data
-screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
+screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
+
+# Your data
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
+screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
+screen-context usage                    disk space by kind of data
 screen-context pii-check FILE           which sensitive-input rules a text would trigger
 screen-context pii-scan [--apply]       apply the rules to frames recorded earlier
-screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
+screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
+screen-context wipe                     delete the key, then all data (no undo)
+
+# Optional
+screen-context diary-material DATE [--budget 6000] [--lang en|ja]
+screen-context proposal prepare|simulate|finish
 screen-context push DATE                send one day to a local OpenViking server
 ```
+
+`export DATE` (one day for OpenViking) still works in 0.2 but is deprecated; use `--format viking`.
 
 ### Optional: diary material and periodic proposals
 
 - `diary-material DATE` prints a compact, bounded Markdown summary of one day, for use as input to a diary or daily report prompt.
 - `proposal prepare` is designed as a pre-run script for a scheduler (cron or an agent framework). It prints material only when there are new observations. Otherwise its last line is `{"wakeAgent": false, ...}`, so the scheduler can skip starting the agent. The agent registers a suggestion with `submit_proposal`; evidence must be a quote from a non-assistant frame, and the same conclusion is suppressed for 24 hours. Close the run with `proposal finish --run-id ID --response-file FILE`.
-
-### Export
-
-`export --from 2026-09-01 --to 2026-10-01 --format md` writes the frames of a time range to one plaintext file in `exports/` (or `--out`): `jsonl`, `md` or `csv`, or `viking` for one rollup JSON per day. The current policy applies, IDE and terminal windows are included unless you pass `--exclude-ide`, and an existing file is never overwritten. Each export is audited with the IDs of the frames it contained, so a later `purge` of those frames warns that a copy exists. An administrator can disable exports (`export_allowed`). `export DATE` still works for one release but is deprecated.
 
 ### Optional: OpenViking
 
@@ -208,7 +268,9 @@ screen-context push DATE                send one day to a local OpenViking serve
 
 ## Windows (beta)
 
-The Windows version has a control window (start, pause, stop, language, MCP client setup) and the same CLI. It is **beta**: it passes automated tests with simulated Windows APIs, but real-device coverage (DPI, multiple monitors, lock and resume, credential store) is still limited. Please report problems in Issues.
+The Windows version has a control window (start, pause, stop, language, MCP client setup) and the same CLI. It passes the automated tests and was checked on one Windows 11 23H2 machine (single monitor, 96 DPI): capture and OCR, client approval, schema migration, checkout exclusion in Edge, and backup, wipe and restore with Credential Manager.
+
+Not yet covered: other DPI settings and multiple monitors, Chrome password fields, a UAC prompt while capture runs, and the contacts app in the default exclusions ([#25](https://github.com/ikeikeikeda66/screen-context-agent/issues/25)). Capture skips a locked session to avoid a crash in the capture library ([#47](https://github.com/ikeikeikeda66/screen-context-agent/issues/47)). Please report problems, with your Windows version and display setup, in Issues.
 
 Setup, portable build, and the acceptance checklist: [docs/WINDOWS.md](docs/WINDOWS.md).
 

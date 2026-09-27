@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "screen-context-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local screen history with OS-native OCR, encrypted storage and a read-only MCP server for AI assistants"
 readme = "README.md"
 license = "MIT"
