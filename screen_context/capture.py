@@ -48,9 +48,12 @@ def run(settings, once=False, stop=None):
     adapter = backend()
     previous_hash, previous_identity, last_saved = None, None, 0
     last_probe = None
+    from .sessions import Presence
+    presence = Presence(settings, adapter)
     while not stop.is_set():
         from .broker import process_client_requests, process_requests
         process_client_requests(settings, adapter)
+        presence.tick(paused=(settings.root / "paused").exists())
         if (settings.root / "paused").exists():
             last_probe = None
             if once: return {"status": "paused"}

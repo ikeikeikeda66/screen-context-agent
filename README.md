@@ -103,6 +103,8 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 
 `screen-context ui` opens your day in the browser: time by app and by site, the pages you viewed, and each interval. You can move between dates, search the whole history (hits shown in context, with the preview image while it is kept), and copy the day's `diary-material` for your assistant with one button. The policy always applies; IDE and terminal windows are shown because this is your own view.
 
+At the top of today's page, the **Where you left off** card shows your latest work session: its main activities, the documents you had open, and the last text on screen. A work session spans apps and ends at a screen lock, a pause of capture, or 15 minutes without input (`screen-context sessions --idle MINUTES` changes that). The card appears only when you open the page; nothing is pushed to you. Its "Helpful" and "Off" buttons store your verdict in the local database so you can tune the threshold (`screen-context sessions` shows the counts); this feedback is never served over MCP. To split sessions, the capture app records when the screen was locked, idle or paused; this history follows the text retention setting. The Today view's own pages are never recorded.
+
 The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
 
 ## Connect an MCP client
@@ -249,6 +251,7 @@ screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context language [system|en|ja]
 screen-context ui [--no-browser]       Today view: digest, search, copy for your assistant (127.0.0.1, one-time link)
+screen-context sessions [--idle MIN]    work-session threshold, Resume card feedback, latest session
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]

@@ -22,6 +22,8 @@ def main():
     indexer = sub.add_parser("index"); indexer.add_argument("--watch", action="store_true")
     profiles = [*PROFILES, *PROFILE_ALIASES]
     mcp = sub.add_parser("serve"); mcp.add_argument("--profile", choices=profiles, default="standard"); mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio"); mcp.add_argument("--port", type=int, default=8765)
+    work = sub.add_parser("sessions", help="Work session threshold, Resume card feedback and the latest session")
+    work.add_argument("--idle", type=int, metavar="MINUTES", help="idle time that ends a session (1–240; default 15)")
     ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
     ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
@@ -222,6 +224,11 @@ def main():
     elif args.command == "serve":
         from .mcp_server import run
         run(settings, args.profile, args.transport, args.port); return
+    elif args.command == "sessions":
+        from . import sessions
+        if args.idle is not None: settings.set_session_idle_minutes(args.idle)
+        result = {"idle_minutes": settings.session_idle_minutes(), "feedback": sessions.feedback_summary(settings),
+                  "latest": sessions.resume(settings, client="cli")}
     elif args.command == "ui":
         from .ui import run
         run(settings, open_browser=not args.no_browser); return

@@ -115,6 +115,8 @@ def maintain(settings, now=None):
             if path.parent == (settings.root / "images").resolve(): path.unlink(missing_ok=True)
         # §8: retain searchable OCR; delete raw detail + preview after 90 days.
         con.execute("UPDATE frames SET image_path=NULL, ocr_json=NULL WHERE ts < ?", (cutoff,))
+        if text_days:  # presence history follows the text: it says when you were at the screen
+            con.execute("DELETE FROM presence WHERE ts < ?", (now - text_days*86400,))
         expired_audit = 0
         if audit_days:
             con.execute("PRAGMA secure_delete=ON")

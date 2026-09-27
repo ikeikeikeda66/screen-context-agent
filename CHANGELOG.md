@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Today view / Today ビュー
+
+- `screen-context ui`: a local web UI with a one-time link, Host/Origin checks, confirmed writes, and a session that ends after 5 idle minutes or on screen lock (#26).
+- Today view: digest by app and by site, pages viewed, intervals, full-text search with context and previews, date navigation, and copy for your assistant (#28).
+- "Where you left off" card with work sessions and local-only feedback; `screen-context sessions` (#29).
+- **Database schema v4** (presence and feedback tables): run `screen-context init` after updating. Until then, `health` reports `needs_init`.
+- Windows: `health` reports a locked session.
+
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カードを追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+
 ## 0.2.0 — Trust foundation / 信頼の土台
 
 You decide which assistants may read your history, what is never recorded, and how long anything is kept. Roadmap Phase 1 ([#3](https://github.com/ikeikeikeda66/screen-context-agent/issues/3)).

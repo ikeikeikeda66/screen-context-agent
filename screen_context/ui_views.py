@@ -8,8 +8,9 @@ import html
 import re
 import time
 from datetime import datetime, timedelta
-from . import material, store
+from . import material, sessions, store
 from .i18n import t
+from .privacy import SELF_TITLE
 from .service import Service
 
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -30,6 +31,8 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .note, .muted { color: var(--muted); font-size: .9rem; }
 ol.results { padding-left: 1.2rem; }
 ol.results li { margin-bottom: 1rem; overflow-wrap: anywhere; }
+section.card { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 8px; padding: .2rem 1rem .6rem; margin: 1rem 0; }
+blockquote { margin: .5rem 0; padding-left: .8rem; border-left: 3px solid var(--muted); overflow-wrap: anywhere; }
 img.preview { display: block; max-width: 100%; max-height: 18rem; margin-top: .4rem; border: 1px solid var(--muted); }
 """
 
@@ -56,7 +59,7 @@ class Text:
 
 def document(lang, body):
     return (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
-            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(t("ui.title", lang))}</title>'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{SELF_TITLE}</title>'
             f'<link rel="stylesheet" href="/ui.css"></head>{body}</html>')
 
 
@@ -84,6 +87,33 @@ def page(settings, lang, date, content, query=""):
         f'<p id="message" role="status"></p>{content}'
         f'<p class="note">{x("ui.untrusted")}</p><p class="note">{x("ui.session")}</p>'
         f'</main><script src="/ui.js"></script></body>')
+
+
+def when(ts, date):
+    """HH:MM on `date`, with the date otherwise (a session can start on an earlier day)."""
+    local = datetime.fromtimestamp(ts)
+    return local.strftime("%H:%M") if local.strftime("%Y-%m-%d") == date else local.strftime("%m-%d %H:%M")
+
+
+def card(settings, lang, date, client):
+    """The Resume card: the latest work session. Shown on today's page only; pull, never pushed."""
+    if date != datetime.now().strftime("%Y-%m-%d"): return ""
+    x, s = Text(lang), sessions.resume(settings, client)
+    if s is None: return ""
+    blocks = "".join(f'<li>{when(b["start_ts"], date)}–{when(b["end_ts"], date)} <strong>{esc(b["app"])}</strong> '
+                     f'{esc((b["title"] or "")[:120])}</li>' for b in s["blocks"])
+    documents = "".join(f'<li>{esc(d["title"][:160])} <span class="muted">{esc(d["app"])}'
+                        f'{" · " + esc(", ".join(d["domains"])) if d["domains"] else ""}</span></li>' for d in s["documents"])
+    return (f'<section class="card" id="resume-card" data-start="{s["start_ts"]}" data-end="{s["end_ts"]}">'
+            f'<h2>{x("ui.card.title")}</h2>'
+            f'<p class="muted">{x("ui.card.span", start=when(s["start_ts"], date), end=when(s["end_ts"], date), frames=s["frames"], app=s["last_app"])}</p>'
+            f'<ul>{blocks}</ul>'
+            + (f'<h3>{x("ui.card.documents")}</h3><ul>{documents}</ul>' if documents else "")
+            + (f'<h3>{x("ui.card.excerpt")}</h3><blockquote>{esc(s["excerpt"])}</blockquote>' if s["excerpt"] else "")
+            + f'<p><button type="button" data-feedback="helpful">{x("ui.card.helpful")}</button> '
+            f'<button type="button" data-feedback="off">{x("ui.card.off")}</button> '
+            f'<span id="feedback-message" data-thanks="{x("ui.card.thanks")}" role="status"></span></p>'
+            f'<p class="note">{x("ui.card.note", minutes=s["idle_minutes"])}</p></section>')
 
 
 def table(headers, rows):

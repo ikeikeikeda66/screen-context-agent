@@ -23,7 +23,7 @@ import time
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
-from . import audit, material, ui_views as views
+from . import audit, material, sessions as work_sessions, ui_views as views
 from .health import screen_locked
 from .i18n import resolve, t
 from .service import Service
@@ -180,6 +180,18 @@ if (copy) copy.addEventListener("click", async () => {
     message.textContent = data.copied;
   } catch (error) { message.textContent = data.copyFailed; }
 });
+const card = document.getElementById("resume-card");
+if (card) for (const button of card.querySelectorAll("button[data-feedback]")) {
+  button.addEventListener("click", async () => {
+    const note = document.getElementById("feedback-message");
+    const done = await post("feedback", {verdict: button.dataset.feedback,
+      session_start: Number(card.dataset.start), session_end: Number(card.dataset.end)});
+    if (!done) return;
+    if (!done.ok) { note.textContent = data.failed; return; }
+    note.textContent = note.dataset.thanks;
+    for (const b of card.querySelectorAll("button[data-feedback]")) b.disabled = true;
+  });
+}
 for (const button of document.querySelectorAll("button[data-action]")) {
   button.addEventListener("click", async () => {
     const message = document.getElementById("message"), action = button.dataset.action;
@@ -218,7 +230,8 @@ def create_app(settings, sessions, port):
     def index(request):
         if not signed_in(request): return notice("ui.expired", 401)
         date = views.day(request.query_params.get("date"))
-        return HTMLResponse(views.page(settings, lang, date, views.today(settings, lang, date, CLIENT)))
+        content = views.card(settings, lang, date, CLIENT) + views.today(settings, lang, date, CLIENT)
+        return HTMLResponse(views.page(settings, lang, date, content))
 
     def search(request):
         if not signed_in(request): return notice("ui.expired", 401)
@@ -240,17 +253,33 @@ def create_app(settings, sessions, port):
         if not sessions.check(session_id(request), touch=False): return JSONResponse({"active": False}, 401)
         return JSONResponse({"active": True, "paused": (settings.root / "paused").exists()})
 
+    async def json_body(request):
+        """The checks every write shares: same Origin, a live session, a JSON object body."""
+        if request.headers.get("origin") not in origins: return None, JSONResponse({"error": "cross-origin"}, 403)
+        if not sessions.check(session_id(request)): return None, JSONResponse({"error": "session"}, 401)
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            return None, JSONResponse({"error": "JSON body required"}, 415)
+        try: body = await request.json()
+        except ValueError: body = None
+        if not isinstance(body, dict): return None, JSONResponse({"error": "JSON object required"}, 400)
+        return body, None
+
+    async def feedback(request):
+        """Resume card feedback. A low-stakes, local-only record, so it needs no confirmation step;
+        the Origin, session and JSON checks still apply."""
+        body, refused = await json_body(request)
+        if refused: return refused
+        try: result = work_sessions.give_feedback(settings, body.get("verdict"), body.get("session_start"), body.get("session_end"))
+        except ValueError as error: return JSONResponse({"error": str(error)}, 400)
+        audit.record(settings, "user", CLIENT, "ui.feedback", params=result)
+        return JSONResponse({"done": True, **result})
+
     async def write(request):
         action = request.path_params["action"]
         if action not in WRITES: return JSONResponse({"error": "unknown action"}, 404)
-        if request.headers.get("origin") not in origins: return JSONResponse({"error": "cross-origin"}, 403)
+        body, refused = await json_body(request)
+        if refused: return refused
         sid = session_id(request)
-        if not sessions.check(sid): return JSONResponse({"error": "session"}, 401)
-        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
-            return JSONResponse({"error": "JSON body required"}, 415)
-        try: body = await request.json()
-        except ValueError: body = None
-        if not isinstance(body, dict): return JSONResponse({"error": "JSON object required"}, 400)
         prompt, run = WRITES[action]
         if "confirm" not in body:
             return JSONResponse({"confirm": sessions.confirm(sid, action), "message": t(prompt, lang)})
@@ -268,6 +297,7 @@ def create_app(settings, sessions, port):
         Route("/image/{frame_id}", image, methods=["GET"]),
         Route("/ui.js", lambda request: Response(SCRIPT, media_type="text/javascript"), methods=["GET"]),
         Route("/ui.css", lambda request: Response(views.STYLE, media_type="text/css"), methods=["GET"]),
+        Route("/api/feedback", feedback, methods=["POST"]),
         Route("/api/{action}", write, methods=["POST"]),
     ]
     return Guard(Starlette(routes=routes), hosts)
