@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="ライセンス: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">リリース一覧</a> · <a href="CHANGELOG.md">変更履歴</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">リリース一覧</a> · <a href="CHANGELOG.md">変更履歴</a> · <a href="https://x.com/ikeikeikeda6">Xプロフィール</a></p>
 
 ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字を読み取り、暗号化したローカル履歴に保存します。その履歴を [Model Context Protocol (MCP)](https://modelcontextprotocol.io) で AI アシスタントに提供します。Claude Code、Claude Desktop、Cursor、VS Code、Windsurf、Codex CLI、Gemini CLI など、MCP に対応したクライアントから利用できます。
 
