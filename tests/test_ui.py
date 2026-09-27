@@ -45,7 +45,12 @@ async def opened(client, sessions):
     return response
 
 
-def actions(settings): return [r["action"] for r in reversed(audit.rows(settings, client=ui.CLIENT))]
+def actions(settings):
+    """The UI's own session and write rows (page reads are audited too, under their tool names)."""
+    return [r["action"] for r in reversed(audit.rows(settings, client=ui.CLIENT)) if r["action"].startswith("ui.")]
+
+
+def last(settings, action): return next(r for r in audit.rows(settings, client=ui.CLIENT) if r["action"] == action)
 
 
 def test_launch_token_becomes_an_httponly_strict_cookie_once(settings, sessions):
@@ -120,7 +125,7 @@ def test_write_needs_same_origin_post_json_and_a_confirmation(settings, sessions
         assert 'data-action="resume"' in (await client.get("/")).text
     call(settings, sessions, steps)
     assert actions(settings) == ["ui.open", "ui.pause"]
-    assert audit.rows(settings, client=ui.CLIENT)[0]["params"] == {"paused": True}
+    assert last(settings, "ui.pause")["params"] == {"paused": True}
 
 
 def test_confirmation_is_bound_to_the_session(settings, sessions):
@@ -145,7 +150,7 @@ def test_session_expires_after_idle_and_polling_does_not_extend_it(settings, ses
         assert (await client.get("/")).status_code == 401
     call(settings, sessions, steps)
     assert actions(settings) == ["ui.open", "ui.close"]
-    assert audit.rows(settings, client=ui.CLIENT)[0]["params"] == {"reason": "idle"}
+    assert last(settings, "ui.close")["params"] == {"reason": "idle"}
 
 
 def test_screen_lock_ends_every_session_at_once(settings, sessions, world):
@@ -158,7 +163,7 @@ def test_screen_lock_ends_every_session_at_once(settings, sessions, world):
         assert (await client.get("/")).status_code == 401     # unlocking does not bring the session back
         assert (await client.get("/launch", params={"t": pending})).status_code == 403
     call(settings, sessions, steps)
-    assert audit.rows(settings, client=ui.CLIENT)[0]["params"] == {"reason": "locked"}
+    assert last(settings, "ui.close")["params"] == {"reason": "locked"}
 
 
 def test_lock_refuses_requests_before_the_sweep_runs(settings, sessions, world):

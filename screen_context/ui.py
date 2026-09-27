@@ -23,9 +23,10 @@ import time
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.routing import Route
-from . import audit
+from . import audit, material, ui_views as views
 from .health import screen_locked
 from .i18n import resolve, t
+from .service import Service
 
 IDLE = 300
 LAUNCH_TTL = 120
@@ -147,30 +148,6 @@ class Guard:
         await self.app(scope, receive, secured)
 
 
-def shell(lang, body, status=200):
-    title = html.escape(t("ui.title", lang))
-    return HTMLResponse(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
-                        f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title>'
-                        f'<link rel="stylesheet" href="/ui.css"></head>{body}</html>', status_code=status)
-
-
-def notice(lang, key, status):
-    return shell(lang, f'<body><main><h1>{html.escape(t("ui.title", lang))}</h1><p>{html.escape(t(key, lang))}</p></main></body>', status)
-
-
-def home(settings, lang):
-    e = lambda key: html.escape(t(key, lang), quote=True)
-    paused = (settings.root / "paused").exists()
-    action = "resume" if paused else "pause"
-    return shell(lang, f'<body data-expired="{e("ui.expired")}" data-failed="{e("ui.failed")}"><main>'
-                       f'<h1>{e("ui.title")}</h1>'
-                       f'<p id="status">{e("ui.status.paused" if paused else "ui.status.recording")}</p>'
-                       f'<button type="button" data-action="{action}">{e("ui." + action)}</button>'
-                       f'<p id="message" role="status"></p>'
-                       f'<p class="note">{e("ui.session")}</p>'
-                       f'</main><script src="/ui.js"></script></body>')
-
-
 SCRIPT = """\
 const main = document.querySelector("main"), data = document.body.dataset;
 let timer;
@@ -186,6 +163,23 @@ async function post(action, body) {
   if (r.status === 401) { ended(); return null; }
   return {ok: r.ok, json: await r.json().catch(() => ({}))};
 }
+const copy = document.getElementById("copy");
+if (copy) copy.addEventListener("click", async () => {
+  const message = document.getElementById("message");
+  const url = "/material?date=" + encodeURIComponent(copy.dataset.date);
+  const text = fetch(url, {credentials: "same-origin"}).then(r => {
+    if (r.status === 401) ended();
+    if (!r.ok) throw new Error(String(r.status));
+    return r.text();
+  });
+  try {
+    // Safari allows the write only inside the click, so hand it the pending text.
+    if (window.ClipboardItem && navigator.clipboard.write)
+      await navigator.clipboard.write([new ClipboardItem({"text/plain": text.then(t => new Blob([t], {type: "text/plain"}))})]);
+    else await navigator.clipboard.writeText(await text);
+    message.textContent = data.copied;
+  } catch (error) { message.textContent = data.copyFailed; }
+});
 for (const button of document.querySelectorAll("button[data-action]")) {
   button.addEventListener("click", async () => {
     const message = document.getElementById("message"), action = button.dataset.action;
@@ -204,32 +198,43 @@ timer = setInterval(async () => {
 }, 10000);
 """
 
-STYLE = """\
-:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { margin: 0; padding: 16px; }
-main { max-width: 40rem; margin: 0 auto; }
-button { font: inherit; padding: .5rem 1rem; }
-.note { opacity: .7; font-size: .9rem; }
-"""
-
-
 def create_app(settings, sessions, port):
     lang = resolve(settings)
     hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     origins = {"http://" + host for host in hosts}
     session_id = lambda request: request.cookies.get(COOKIE)
 
+    notice = lambda key, status: HTMLResponse(views.notice(lang, key), status_code=status)
+    signed_in = lambda request: sessions.check(session_id(request))
+
     def launch(request):
         sid = sessions.exchange(request.query_params.get("t"))
-        if sid is None: return notice(lang, "ui.invalid", 403)
+        if sid is None: return notice("ui.invalid", 403)
         audit.record(settings, "user", CLIENT, "ui.open")
         response = RedirectResponse("/", status_code=303)
         response.set_cookie(COOKIE, sid, httponly=True, samesite="strict", path="/")
         return response
 
     def index(request):
-        if not sessions.check(session_id(request)): return notice(lang, "ui.expired", 401)
-        return home(settings, lang)
+        if not signed_in(request): return notice("ui.expired", 401)
+        date = views.day(request.query_params.get("date"))
+        return HTMLResponse(views.page(settings, lang, date, views.today(settings, lang, date, CLIENT)))
+
+    def search(request):
+        if not signed_in(request): return notice("ui.expired", 401)
+        date, query = views.day(request.query_params.get("date")), request.query_params.get("q", "")
+        return HTMLResponse(views.page(settings, lang, date, views.search(settings, lang, query, date, CLIENT), query))
+
+    def diary(request):
+        """The `diary-material` Markdown for the copy button (audited like the CLI command)."""
+        if not signed_in(request): return PlainTextResponse("", status_code=401)
+        return PlainTextResponse(material.diary_markdown(settings, views.day(request.query_params.get("date")), client=CLIENT, lang=lang))
+
+    def image(request):
+        if not signed_in(request): return Response(status_code=401)
+        try: data = Service(settings, "full", CLIENT, audit_path="user").get_snapshot_image(request.path_params["frame_id"])
+        except ValueError: return Response(status_code=404)
+        return Response(data, media_type="image/webp")
 
     def state(request):
         if not sessions.check(session_id(request), touch=False): return JSONResponse({"active": False}, 401)
@@ -258,8 +263,11 @@ def create_app(settings, sessions, port):
         Route("/launch", launch, methods=["GET"]),
         Route("/", index, methods=["GET"]),
         Route("/state", state, methods=["GET"]),
+        Route("/search", search, methods=["GET"]),
+        Route("/material", diary, methods=["GET"]),
+        Route("/image/{frame_id}", image, methods=["GET"]),
         Route("/ui.js", lambda request: Response(SCRIPT, media_type="text/javascript"), methods=["GET"]),
-        Route("/ui.css", lambda request: Response(STYLE, media_type="text/css"), methods=["GET"]),
+        Route("/ui.css", lambda request: Response(views.STYLE, media_type="text/css"), methods=["GET"]),
         Route("/api/{action}", write, methods=["POST"]),
     ]
     return Guard(Starlette(routes=routes), hosts)

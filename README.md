@@ -99,6 +99,12 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 - **Capture Interval**: 5 s, 15 s (default), 30 s, 1 min, 2 min or 5 min. The change applies without a restart. Unchanged screens are not saved again.
 - **Language**: System Default, English or 日本語. All menu text, dialogs, and generated material follow this setting.
 
+## Today view
+
+`screen-context ui` opens your day in the browser: time by app and by site, the pages you viewed, and each interval. You can move between dates, search the whole history (hits shown in context, with the preview image while it is kept), and copy the day's `diary-material` for your assistant with one button. The policy always applies; IDE and terminal windows are shown because this is your own view.
+
+The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
+
 ## Connect an MCP client
 
 Print a ready-to-paste entry for your client:
@@ -242,7 +248,7 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context language [system|en|ja]
-screen-context ui [--no-browser]       local web UI: one-time link, 127.0.0.1 only; the session ends after 5 idle minutes or on screen lock
+screen-context ui [--no-browser]       Today view: digest, search, copy for your assistant (127.0.0.1, one-time link)
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
