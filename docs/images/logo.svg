@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title">
+  <title id="title">ScreenContext logo</title>
+  <rect width="160" height="160" rx="36" fill="#14243a"/>
+  <rect x="31" y="35" width="98" height="72" rx="10" fill="#f4f8fc"/>
+  <path d="M31 53h98" stroke="#b8c8d9" stroke-width="5"/>
+  <circle cx="43" cy="44" r="3" fill="#36c7b0"/>
+  <circle cx="54" cy="44" r="3" fill="#72a9e8"/>
+  <path d="M49 72h58M49 84h42M49 96h29" stroke="#91a5ba" stroke-linecap="round" stroke-width="5"/>
+  <circle cx="105" cy="105" r="25" fill="#36c7b0" stroke="#14243a" stroke-width="7"/>
+  <path d="M105 92v26M92 105h26" stroke="#14243a" stroke-linecap="round" stroke-width="6"/>
+</svg>

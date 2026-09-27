@@ -1,6 +1,16 @@
-# ScreenContext
+<p align="center">
+  <img src="docs/images/logo.svg" alt="ScreenContext logo" width="112" height="112">
+</p>
 
-[日本語版 README はこちら](README.ja.md)
+<h1 align="center">ScreenContext</h1>
+
+<p align="center">
+  <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ikeikeikeda66/screen-context-agent?display_name=tag&label=release"></a>
+  <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-0.2.0-blue"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+</p>
+
+<p align="center"><a href="README.ja.md">日本語</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
 ScreenContext records the foreground window, reads its text with the operating system's built-in OCR, keeps an encrypted local history, and exposes that history to AI assistants through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Any MCP client can use it: Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI, Gemini CLI and others.
 
