@@ -22,6 +22,7 @@ In scope, for example:
 These are documented design limits, not vulnerabilities (see the threat model in the README):
 
 - Programs running as the same user can read the history: they can copy a client token from its configuration file or read the key from the credential store.
+- A self-signed macOS build disables library validation (`packaging/entitlements.plist`), because the embedded Python.framework cannot load without it. A program running as the same user could therefore plant a library in the app and use its Screen Recording permission. A Developer ID build would not need the entitlement.
 - A local administrator can bypass managed settings.
 - Exports and results already returned to clients are outside the encrypted store.
 - Sensitive-input detection is pattern based and depends on OCR.

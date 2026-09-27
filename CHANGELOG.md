@@ -20,7 +20,7 @@ You decide which assistants may read your history, what is never recorded, and h
 - Database schema v3. Run `screen-context init` after updating; `health` reports `needs_init` until then.
 - MCP entries now carry `SCREEN_CONTEXT_CLIENT_TOKEN`. Entries from 0.1 must be created again with `mcp-config`.
 - `export DATE` is deprecated; use `export --format viking`.
-- `packaging/build_mac.sh` signs every nested extension module, so a build signed with a real identity is not killed by the hardened runtime.
+- `packaging/build_mac.sh` signs every nested extension module and applies `packaging/entitlements.plist` (library validation off), so a self-signed build starts under the hardened runtime.
 
 ### Fixed
 
