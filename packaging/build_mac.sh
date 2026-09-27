@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build and sign dist/ScreenContext.app. macOS keeps the Screen Recording permission across
 # rebuilds only while the signing identity stays the same: use a Developer ID or the self-signed
-# identity from `sh spikes/phase0/macos/signing_spike.sh identity`. "-" (ad hoc) lasts one build.
+# identity from `sh packaging/macos/signing_identity.sh`. "-" (ad hoc) lasts one build.
 set -eu
 : "${SCREEN_CONTEXT_SIGN_IDENTITY:?Set a code-signing identity, or - for an ad hoc signature (see README)}"
 cd packaging

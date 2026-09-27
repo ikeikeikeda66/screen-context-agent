@@ -185,7 +185,7 @@ ScreenContext protects against:
 
 It does **not** protect against:
 
-- **Other programs running as your user.** They can start `screen-context serve` with a token copied from a client's configuration file, or read the key from the credential store, and so read your history without Screen Recording permission. Keeping the key inside a signed app is planned only if a Developer ID is adopted ([roadmap](docs/ROADMAP.md)).
+- **Other programs running as your user.** They can start `screen-context serve` with a token copied from a client's configuration file, or read the key from the credential store, and so read your history without Screen Recording permission. A self-signed build also turns off library validation (the embedded Python cannot load without it), so such a program could plant code in the app and use its Screen Recording permission. Keeping the key inside a signed app is planned only if a Developer ID is adopted ([roadmap](docs/ROADMAP.md)).
 - **A local administrator.** Managed settings prevent mistakes and policy violations; they are not DRM.
 - **Instructions shown on screen** (prompt injection). Results are labeled untrusted; clients must treat them as data.
 - **Copies outside the store.** Exports and results already returned to a client are not reached by later exclusions, purges or retention. `purge` tells you when such copies exist.
