@@ -242,6 +242,7 @@ screen-context pause | resume       新しい撮影を停止・再開
 screen-context status | health      待ち行列と各プロセスの状態
 screen-context maintain             保持期間の処理と日次集約
 screen-context language [system|en|ja]
+screen-context ui [--no-browser]       ローカルの Web UI（1回限りのリンク、127.0.0.1 のみ。5分操作なし・画面ロックで終了）
 
 # MCP クライアント
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]

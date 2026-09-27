@@ -242,6 +242,7 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context language [system|en|ja]
+screen-context ui [--no-browser]       local web UI: one-time link, 127.0.0.1 only; the session ends after 5 idle minutes or on screen lock
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]

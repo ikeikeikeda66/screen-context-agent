@@ -22,6 +22,8 @@ def main():
     indexer = sub.add_parser("index"); indexer.add_argument("--watch", action="store_true")
     profiles = [*PROFILES, *PROFILE_ALIASES]
     mcp = sub.add_parser("serve"); mcp.add_argument("--profile", choices=profiles, default="standard"); mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio"); mcp.add_argument("--port", type=int, default=8765)
+    ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
+    ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
     config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
@@ -63,7 +65,7 @@ def main():
     args = parser.parse_args()
     settings = Settings.environment()
     stop = threading.Event()
-    if args.command != "serve":
+    if args.command not in ("serve", "ui"):  # both run uvicorn, which handles the signals
         for sig in (signal.SIGINT, signal.SIGTERM): signal.signal(sig, lambda *_: stop.set())
     from . import store
     if args.command == "init":
@@ -220,6 +222,9 @@ def main():
     elif args.command == "serve":
         from .mcp_server import run
         run(settings, args.profile, args.transport, args.port); return
+    elif args.command == "ui":
+        from .ui import run
+        run(settings, open_browser=not args.no_browser); return
     else:
         from . import viking
         if args.command == "push": result = viking.push(settings, args.date)

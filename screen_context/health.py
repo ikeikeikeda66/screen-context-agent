@@ -26,6 +26,7 @@ def read_json(path):
 
 def session_state():
     """(locked, idle_seconds); None when the platform cannot tell."""
+    if sys.platform == "win32": return windows_locked(), None
     if sys.platform != "darwin": return None, None
     try:
         import Quartz
@@ -34,6 +35,29 @@ def session_state():
         idle = float(Quartz.CGEventSourceSecondsSinceLastEventType(Quartz.kCGEventSourceStateCombinedSessionState, Quartz.kCGAnyInputEventType))
         return locked, idle
     except Exception: return None, None
+
+
+def windows_locked():
+    """True while the lock screen (or another secure desktop) has the input; None if unknown.
+    The same check as the capture backend's, without importing capture code."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user = ctypes.WinDLL("user32")
+        user.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        user.OpenInputDesktop.restype = wintypes.HANDLE
+        user.SwitchDesktop.argtypes = [wintypes.HANDLE]
+        user.CloseDesktop.argtypes = [wintypes.HANDLE]
+        desktop = user.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+        if not desktop: return True
+        try: return not user.SwitchDesktop(desktop)
+        finally: user.CloseDesktop(desktop)
+    except Exception: return None
+
+
+def screen_locked():
+    """True when the screen is known to be locked. Platforms that cannot tell report False."""
+    return bool(session_state()[0])
 
 
 def health(settings, now=None):
