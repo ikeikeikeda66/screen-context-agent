@@ -31,6 +31,20 @@ def duration(text):
     return int(match.group(1)) * {"m": 60, "h": 3600, "d": 86400}[match.group(2)]
 
 
+def run(settings, since=None, until=None, last=None, app=None, keyword=None, block=None, excluded=False, apply=False, actor="cli"):
+    """What `screen-context purge` does, for the CLI and the UI alike: without `apply` a dry run
+    (the plan, with who already received the frames), with it the deletion."""
+    if last: since = max(since or 0, time.time() - duration(last))
+    selector = {"since": since, "until": until, "app": app, "keyword": keyword, "block": block, "excluded": excluded}
+    ids = select(settings, **selector)
+    # Frames not yet OCRed match only on time and app; content selectors cannot see them.
+    content = keyword or block or excluded
+    spool_files = [] if content or (since is None and until is None) else spooled(settings, since, until, app)
+    if not apply: return {**plan(settings, ids, spool_files), "deleted": False}
+    if not ids and not spool_files: return {"frames": 0, "deleted": False}
+    return {**execute(settings, ids, selector, spool_files, actor=actor), "deleted": True}
+
+
 def select(settings, since=None, until=None, app=None, keyword=None, block=None, excluded=False):
     """IDs of stored frames matching every given selector. At least one selector is required."""
     if since is None and until is None and not (app or keyword or block or excluded):
@@ -81,6 +95,7 @@ def recipients(con, ids):
     """Who already received these frames: [{path, client, frames, last_ts}] from the audit log."""
     wanted, seen = set(ids), {}
     for row in con.execute("SELECT path, client, ts, frame_ids FROM audit WHERE frame_ids != '[]'"):
+        if row["path"] == "user" and row["client"] == "ui": continue  # a page view in the local UI copies nothing out
         hits = wanted & set(json.loads(row["frame_ids"]))
         if hits:
             entry = seen.setdefault((row["path"], row["client"]), {"path": row["path"], "client": row["client"], "frames": set(), "last_ts": 0})

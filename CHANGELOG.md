@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — Today view / Today ビュー
+
+- `screen-context ui`: a local web UI with a one-time link, Host/Origin checks, confirmed writes, and a session that ends after 5 idle minutes or on screen lock (#26).
+- Today view: digest by app and by site, pages viewed, intervals, full-text search with context and previews, date navigation, and copy for your assistant (#28).
+- "Where you left off" card with work sessions and local-only feedback; `screen-context sessions` (#29).
+- **Database schema v4** (presence and feedback tables): run `screen-context init` after updating. Until then, `health` reports `needs_init`.
+- Control tabs in the UI: Data (storage, not-recorded counts, retention, delete, exclude), Access log, Clients (revoke). Each runs the same code as its CLI command (#30).
+- `screen-context exclude --app | --domain [--delete-past]`; `usage` reports the not-recorded counts.
+- macOS menu bar: "Open Today…" and "Delete Recent" (last 5 min, 15 min or hour), through the same purge path as `purge --last` (#31).
+- Touch ID (or the login password) before "Open Today…" and before exporting, backing up or approving a client in the UI; the menu bar app asks, and any other answer refuses the change. On Windows, Windows Hello or the sign-in password (#27, #33).
+- `screen-context review [--days N] [--format md]`: a dogfooding report with counts only — days the Today view was opened, Resume card feedback, sessions per idle threshold, sensitive-input counts (#32).
+- Purge warnings no longer count your own page views in the UI as copies; the UI's copy button still counts.
+- Fixed: `retention --preview none` made hourly maintenance fail; previews are now kept forever as documented.
+- Windows: `health` reports a locked session.
+- Windows control window: "Open Today…" (after Windows Hello or the sign-in password) and "Delete Recent" (last 5 min, 15 min or hour, the same purge path) (#33).
+
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+
 ## 0.2.0 — Trust foundation / 信頼の土台
 
 You decide which assistants may read your history, what is never recorded, and how long anything is kept. Roadmap Phase 1 ([#3](https://github.com/ikeikeikeda66/screen-context-agent/issues/3)).

@@ -77,6 +77,23 @@ class Settings:
             raise ValueError("Capture interval must be 5–300 seconds")
         self.save_option("interval_seconds", seconds)
 
+    def session_idle_minutes(self):
+        """Idle time that ends a work session (roadmap decision 3)."""
+        value = self.option("session_idle_minutes", 15)
+        if type(value) is not int or not 1 <= value <= 240:
+            raise ValueError("Session idle time must be 1–240 minutes")
+        return value
+
+    def set_session_idle_minutes(self, minutes):
+        if type(minutes) is not int or not 1 <= minutes <= 240:
+            raise ValueError("Session idle time must be 1–240 minutes")
+        self.save_option("session_idle_minutes", minutes)
+
+    def preview_cutoff(self, now):
+        """Oldest timestamp whose preview is kept; 0 when previews are kept forever (`none`)."""
+        days = self.retention("preview_retention_days")
+        return 0 if days is None else now - days * 86400
+
     def retention(self, name):
         value = self.option(name, RETENTION[name])
         if value is not None and (type(value) is not int or not 1 <= value <= 36500):

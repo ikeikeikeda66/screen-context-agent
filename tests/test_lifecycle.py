@@ -134,4 +134,4 @@ def test_cli_wipe_needs_erase_and_backup_uses_a_passphrase_file(tmp_path):
     assert refused.returncode != 0 and "nothing was deleted" in refused.stderr and (tmp_path / "data" / "history.db").exists()
     wiped = json.loads(cli("wipe", "--confirm", "ERASE").stdout)
     assert wiped["key_deleted"] is False and "SCREEN_CONTEXT_KEY" in wiped["note"] and not (tmp_path / "data").exists()
-    assert json.loads(cli("restore", str(tmp_path / "b.zip"), "--passphrase-file", str(secret)).stdout)["schema"] == [3, 3]
+    assert json.loads(cli("restore", str(tmp_path / "b.zip"), "--passphrase-file", str(secret)).stdout)["schema"] == [store.SCHEMA_VERSION] * 2

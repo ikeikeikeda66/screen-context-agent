@@ -98,6 +98,26 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 - **Pause Capture / Resume Capture**: use this while watching video or showing private content. The state is saved.
 - **Capture Interval**: 5 s, 15 s (default), 30 s, 1 min, 2 min or 5 min. The change applies without a restart. Unchanged screens are not saved again.
 - **Language**: System Default, English or 日本語. All menu text, dialogs, and generated material follow this setting.
+- **Open Today…**: asks for Touch ID (or your login password), then opens the [Today view](#today-view) in your browser.
+- **Delete Recent**: last 5 min, 15 min or hour, for when something was recorded by mistake. It shows what it will delete (and which assistants already received it) and asks before deleting. Frames still waiting for OCR in that window are deleted too. No undo.
+
+## Today view
+
+`screen-context ui` opens your day in the browser: time by app and by site, the pages you viewed, and each interval. You can move between dates, search the whole history (hits shown in context, with the preview image while it is kept), and copy the day's `diary-material` for your assistant with one button. The policy always applies; IDE and terminal windows are shown because this is your own view.
+
+At the top of today's page, the **Where you left off** card shows your latest work session: its main activities, the documents you had open, and the last text on screen. A work session spans apps and ends at a screen lock, a pause of capture, or 15 minutes without input (`screen-context sessions --idle MINUTES` changes that). The card appears only when you open the page; nothing is pushed to you. Its "Helpful" and "Off" buttons store your verdict in the local database so you can tune the threshold (`screen-context sessions` shows the counts); this feedback is never served over MCP. To split sessions, the capture app records when the screen was locked, idle or paused; this history follows the text retention setting. The Today view's own pages are never recorded.
+
+`screen-context review [--days 14] [--format md]` summarizes how you used it: the days the Today view was opened (working days against a target of 10), the card's feedback, how many sessions each idle threshold from 5 to 30 minutes would give on the same days, and how many screens each sensitive-input rule held back. It holds counts only, never screen text, titles or queries, so the Markdown can go into an issue as is.
+
+Tabs next to Today put the maintenance commands on the same screen. Each one runs the same code as its CLI command and asks you to confirm what it will do first:
+
+- **Data**: storage use; how many screens were not recorded, or had lines hidden, for possible personal data; retention periods; deleting records (a range, an app, text, or one interval straight from the digest), with a warning when an assistant or an export already has copies; and stopping recording of an app or site. Deleting what that app or site already recorded is a separate checkbox, off by default. From the digest, "Exclude" next to an app or site fills in this form.
+- **Access log**: what each assistant asked for and which screens it received. Choose "All" to include your own reads and changes.
+- **Clients**: each MCP client, its allowed profile and when it last read your history. Approve a waiting client or revoke one here.
+
+Exporting a time range as a plaintext file, making a backup, and approving a new client also ask for Touch ID (or your login password). The menu bar app shows the prompt, so it must be running; without it, or when you cancel, nothing changes. Erasing and restoring stay in the terminal (`screen-context wipe`, `screen-context restore FILE`) because the app has to be quit for them. On Windows, the capture worker asks with Windows Hello (face, fingerprint or PIN), or for your Windows sign-in password when Hello is not set up; start capture in the control window first. `screen-context ui` from the terminal does not ask: the terminal can already read the history.
+
+The page runs on 127.0.0.1 only and opens through a one-time link. The session ends after 5 minutes without activity or when the screen locks; run the command again to reopen it. Opening, closing, searches and changes are recorded in the audit log.
 
 ## Connect an MCP client
 
@@ -242,6 +262,9 @@ screen-context pause | resume       stop or restart new captures
 screen-context status | health      queue and worker state
 screen-context maintain             retention and daily rollups
 screen-context language [system|en|ja]
+screen-context ui [--no-browser]       Today view: digest, search, copy for your assistant (127.0.0.1, one-time link)
+screen-context sessions [--idle MIN]    work-session threshold, Resume card feedback, latest session
+screen-context review [--days N] [--format md]  usage report for tuning (counts only)
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
@@ -250,6 +273,7 @@ screen-context clients list | approve NAME | revoke NAME
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 
 # Your data
+screen-context exclude --app ID | --domain NAME [--delete-past [--yes]]   stop recording an app or site
 screen-context purge [--from T] [--to T] [--last 15m] [--app ID] [--keyword TEXT] [--block ID] [--excluded] [--yes]
 screen-context retention [--preview D] [--text D] [--audit D]   days to keep, or none
 screen-context usage                    disk space by kind of data
@@ -278,7 +302,7 @@ screen-context push DATE                send one day to a local OpenViking serve
 
 ## Windows (beta)
 
-The Windows version has a control window (start, pause, stop, language, MCP client setup) and the same CLI. It passes the automated tests and was checked on one Windows 11 23H2 machine (single monitor, 96 DPI): capture and OCR, client approval, schema migration, checkout exclusion in Edge, and backup, wipe and restore with Credential Manager.
+The Windows version has a control window (start, pause, stop, Open Today…, Delete Recent, language, MCP client setup) and the same CLI. Open Today… asks for Windows Hello or your sign-in password first, as on macOS. It passes the automated tests and was checked on one Windows 11 23H2 machine (single monitor, 96 DPI): capture and OCR, client approval, schema migration, checkout exclusion in Edge, and backup, wipe and restore with Credential Manager.
 
 Not yet covered: other DPI settings and multiple monitors, Chrome password fields, a UAC prompt while capture runs, and the contacts app in the default exclusions ([#25](https://github.com/ikeikeikeda66/screen-context-agent/issues/25)). Capture skips a locked session to avoid a crash in the capture library ([#47](https://github.com/ikeikeikeda66/screen-context-agent/issues/47)). Please report problems, with your Windows version and display setup, in Issues.
 

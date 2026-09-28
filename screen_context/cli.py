@@ -22,6 +22,12 @@ def main():
     indexer = sub.add_parser("index"); indexer.add_argument("--watch", action="store_true")
     profiles = [*PROFILES, *PROFILE_ALIASES]
     mcp = sub.add_parser("serve"); mcp.add_argument("--profile", choices=profiles, default="standard"); mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio"); mcp.add_argument("--port", type=int, default=8765)
+    work = sub.add_parser("sessions", help="Work session threshold, Resume card feedback and the latest session")
+    work.add_argument("--idle", type=int, metavar="MINUTES", help="idle time that ends a session (1–240; default 15)")
+    review = sub.add_parser("review", help="Dogfooding report: days the Today view was opened, Resume card feedback, sensitive-input counts (counts only)")
+    review.add_argument("--days", type=int, default=14); review.add_argument("--format", choices=["json", "md"], default="json")
+    ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
+    ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
     config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
@@ -39,6 +45,11 @@ def main():
     sub.add_parser("usage", help="Disk space by kind of data, and the retention periods")
     keep = sub.add_parser("retention", help="Show or set how long data is kept (days, or none for forever)")
     for flag in ("preview", "text", "audit"): keep.add_argument("--" + flag, metavar="DAYS|none")
+    exclude = sub.add_parser("exclude", help="Add an app or domain to the exclusion policy")
+    target = exclude.add_mutually_exclusive_group(required=True)
+    target.add_argument("--app", help="bundle ID (macOS) or process name (Windows)"); target.add_argument("--domain")
+    exclude.add_argument("--delete-past", action="store_true", help="also delete what it already matches (no undo)")
+    exclude.add_argument("--yes", action="store_true", help="with --delete-past: delete (otherwise only report)")
     purge = sub.add_parser("purge", help="Delete frames and everything derived from them (no undo)")
     purge.add_argument("--from", dest="since", help="local time, YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     purge.add_argument("--to", dest="until", help="local time, exclusive"); purge.add_argument("--last", help="for example 15m, 2h, 1d")
@@ -63,7 +74,7 @@ def main():
     args = parser.parse_args()
     settings = Settings.environment()
     stop = threading.Event()
-    if args.command != "serve":
+    if args.command not in ("serve", "ui"):  # both run uvicorn, which handles the signals
         for sig in (signal.SIGINT, signal.SIGTERM): signal.signal(sig, lambda *_: stop.set())
     from . import store
     if args.command == "init":
@@ -120,24 +131,20 @@ def main():
             except (ValueError, PermissionError) as error: parser.error(str(error))
         result = {name: settings.retention(name) for name in ("preview_retention_days", "text_retention_days", "audit_retention_days")}
     elif args.command == "purge":
-        import time
         from datetime import datetime
         from . import purge
         try:
             since = datetime.fromisoformat(args.since).timestamp() if args.since else None
             until = datetime.fromisoformat(args.until).timestamp() if args.until else None
-            if args.last: since = max(since or 0, time.time() - purge.duration(args.last))
-            selector = {"since": since, "until": until, "app": args.app, "keyword": args.keyword, "block": args.block, "excluded": args.excluded}
-            ids = purge.select(settings, **selector)
+            result = purge.run(settings, since, until, args.last, args.app, args.keyword, args.block, args.excluded, apply=args.yes)
         except ValueError as error: parser.error(str(error))
-        # Frames not yet OCRed match only on time and app; content selectors cannot see them.
-        content = args.keyword or args.block or args.excluded
-        spool_files = [] if content or (since is None and until is None) else purge.spooled(settings, since, until, args.app)
-        if not args.yes:
-            result = {**purge.plan(settings, ids, spool_files), "deleted": False,
-                      "next": "Run again with --yes to delete. This cannot be undone."}
-        elif not ids and not spool_files: result = {"frames": 0, "deleted": False}
-        else: result = {**purge.execute(settings, ids, selector, spool_files), "deleted": True}
+        if not args.yes: result["next"] = "Run again with --yes to delete. This cannot be undone."
+    elif args.command == "exclude":
+        from .exclusions import exclude
+        kind, value = ("app", args.app) if args.app else ("domain", args.domain)
+        try: result = exclude(settings, kind, value, args.delete_past, apply=args.yes or not args.delete_past)
+        except (ValueError, PermissionError) as error: parser.error(str(error))
+        if args.delete_past and not args.yes: result["next"] = "Run again with --yes to add the rule and delete these frames. This cannot be undone."
     elif args.command == "pii-scan":
         from . import rescan
         drops, redactions = rescan.scan(settings)
@@ -220,6 +227,20 @@ def main():
     elif args.command == "serve":
         from .mcp_server import run
         run(settings, args.profile, args.transport, args.port); return
+    elif args.command == "sessions":
+        from . import sessions
+        if args.idle is not None: settings.set_session_idle_minutes(args.idle)
+        result = {"idle_minutes": settings.session_idle_minutes(), "feedback": sessions.feedback_summary(settings),
+                  "latest": sessions.resume(settings, client="cli")}
+    elif args.command == "review":
+        from . import review
+        from .i18n import resolve
+        if not 1 <= args.days <= 366: parser.error("--days must be 1-366")
+        result = review.report(settings, days=args.days)
+        if args.format == "md": print(review.markdown(result, resolve(settings))); return
+    elif args.command == "ui":
+        from .ui import run
+        run(settings, open_browser=not args.no_browser); return
     else:
         from . import viking
         if args.command == "push": result = viking.push(settings, args.date)

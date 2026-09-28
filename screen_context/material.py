@@ -45,15 +45,8 @@ def excerpt(text, limit, skip=frozenset()):
     return " / ".join(out)
 
 
-def diary_markdown(settings, date, budget=6000, per_block=240, client="diary", lang=None):
-    lang = lang or resolve(settings)
-    service = Service(settings, "full", client, audit_path="user")
-    blocks, meta = [], None
-    for page in pages(service, date):
-        meta = meta or page
-        blocks.extend(page["records"])
-    hm = lambda t: time.strftime("%H:%M", time.localtime(t))
-    # Consecutive intervals of one app within 10 minutes form one entry, even when the window title changes.
+def merge(blocks):
+    """Consecutive intervals of one app within 10 minutes form one entry, even when the window title changes."""
     merged = []
     for b in blocks:
         last = merged[-1] if merged else None
@@ -62,6 +55,49 @@ def diary_markdown(settings, date, budget=6000, per_block=240, client="diary", l
             last["text"] += "\n" + b["text"]; last["domains"] = sorted(set(last["domains"]) | set(b["domains"]))
             if b["title"] and b["title"] not in last["titles"]: last["titles"].append(b["title"])
         else: merged.append({**b, "titles": [b["title"]] if b["title"] else []})
+    return merged
+
+
+def collect(settings, date, client):
+    """(page metadata, merged intervals) for one day, read on the user path and audited as `client`.
+    The policy applies; IDE apps are included (full profile)."""
+    service = Service(settings, "full", client, audit_path="user")
+    blocks, meta = [], None
+    for page in pages(service, date):
+        meta = meta or page
+        blocks.extend(page["records"])
+    return meta, merge(blocks)
+
+
+def digest(settings, date, client="ui"):
+    """Numbers for the Today view, from the same intervals as `diary-material`. Seconds are the
+    span between the first and last screen of an interval: observed time, not time worked."""
+    meta, merged = collect(settings, date, client)
+    apps, domains, pages_seen = {}, {}, {}
+    for b in merged:
+        seconds = b["end_ts"] - b["start_ts"]
+        app = apps.setdefault(b["app"], {"app": b["app"], "app_bundle": b["app_bundle"], "seconds": 0, "frames": 0, "intervals": 0})
+        app["seconds"] += seconds; app["frames"] += b["frames"]; app["intervals"] += 1
+        shown = sites(b["domains"])
+        for name in shown:
+            domain = domains.setdefault(name, {"domain": name, "seconds": 0, "intervals": 0})
+            domain["seconds"] += seconds; domain["intervals"] += 1
+        for title in b["titles"] if shown else []:
+            pages_seen.setdefault(title, {"title": title, "domains": shown, "ts": b["start_ts"]})
+    order = lambda rows: sorted(rows, key=lambda r: (-r["seconds"], -r["intervals"]))
+    return {"date": date, "timezone": meta["timezone"] if meta else "",
+            "start_ts": merged[0]["start_ts"] if merged else None, "end_ts": merged[-1]["end_ts"] if merged else None,
+            "intervals": [{k: b[k] for k in ("frame_id", "start_ts", "end_ts", "app", "app_bundle", "titles", "frames")} | {"domains": sites(b["domains"])}
+                          for b in merged],
+            "frames": sum(b["frames"] for b in merged),
+            "apps": order(apps.values()), "domains": order(domains.values()),
+            "pages": sorted(pages_seen.values(), key=lambda p: p["ts"])}
+
+
+def diary_markdown(settings, date, budget=6000, per_block=240, client="diary", lang=None):
+    lang = lang or resolve(settings)
+    meta, merged = collect(settings, date, client)
+    hm = lambda t: time.strftime("%H:%M", time.localtime(t))
     lines = [t("diary.title", lang, date=date, timezone=meta["timezone"] if meta else ""), t("diary.rules", lang), ""]
     if not merged:
         lines.append(t("diary.empty", lang)); return "\n".join(lines)

@@ -18,7 +18,7 @@ def test_v2_to_v3_imports_and_removes_legacy_log(tmp_path):
              json.dumps({"ts": 2.5, "client": "claude-code", "profile": "full", "tool": "get_recent_activity", "query_sha256": "cd" * 32, "count": 0}),
              '{"ts": 3.5, "client": "cut short']
     (tmp_path / "audit.jsonl").write_text("\n".join(lines), encoding="utf-8")
-    assert store.initialize(s) == (2, 3)
+    assert store.initialize(s) == (2, store.SCHEMA_VERSION)
     assert not (tmp_path / "audit.jsonl").exists()
     entries = audit.rows(s)
     assert [(e["client"], e["action"], e["result_count"], e["path"], e["query"]) for e in entries] == [

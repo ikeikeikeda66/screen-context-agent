@@ -84,6 +84,12 @@ class Backend:
         text = t("client.title", lang, name=name) + "\n\n" + t("client.body", lang, name=name, profile=profile)
         return self.user.MessageBoxW(None, text, "Screen Context", self.DIALOG) == 6
 
+    def authenticate(self, reason_text):
+        """Windows Hello, or the sign-in password when Hello is not set up (#33). Asked from this
+        windowless worker like the approvals above."""
+        from ..reauth import windows
+        return windows(reason_text)
+
     def capture(self, front):
         from windows_capture import WindowsCapture
         self.validate_target(front)

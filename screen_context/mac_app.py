@@ -2,10 +2,11 @@
 import time
 import threading
 import objc
-from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSEventMaskAny
+from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny
 from Foundation import NSObject, NSDate, NSDefaultRunLoopMode
+from . import quick, reauth
 from .config import Settings
-from .i18n import CHOICES, interval_label, resolve, t
+from .i18n import CHOICES, auth, interval_label, resolve, t
 
 INTERVALS = (5, 15, 30, 60, 120, 300)
 
@@ -34,6 +35,34 @@ class MenuController(NSObject):
         except Exception:
             self.showError(t("error.language", self.lang()))
 
+    def openToday_(self, sender):
+        lang = self.lang()
+        try:
+            status = quick.open_today(self.settings, lambda: reauth.touch_id(t("auth.reason.open", lang)))
+            if status in (reauth.FAILED, reauth.UNAVAILABLE): self.showError(auth("auth.refused." + status, lang))
+        except Exception as error: self.showError(t("error.open", lang, error=type(error).__name__))
+
+    def deleteRecent_(self, sender):
+        """Quick purge for "I recorded something by mistake": confirm, then `purge --last` (#31)."""
+        lang, minutes = self.lang(), sender.tag()
+        try:
+            title, body = quick.confirmation(self.settings, minutes, lang)
+            if body is None:
+                self.showError(title)
+                return
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_(title)
+            alert.setInformativeText_(body)
+            alert.addButtonWithTitle_(t("menu.delete.cancel", lang))   # first button: the default (Return)
+            alert.addButtonWithTitle_(t("menu.delete.confirm", lang))
+            if hasattr(alert.buttons()[1], "setHasDestructiveAction_"): alert.buttons()[1].setHasDestructiveAction_(True)
+            NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            if alert.runModal() != NSAlertSecondButtonReturn: return
+            result = quick.delete(self.settings, minutes)
+            self.showError(t("menu.delete.done", lang, frames=result["frames"]))
+        except Exception as error:
+            self.showError(t("error.purge", lang, error=type(error).__name__))
+
     def quit_(self, sender):
         self.stop.set()
 
@@ -52,6 +81,9 @@ class MenuController(NSObject):
         lang = self.lang()
         paused = (self.settings.root / "paused").exists()
         self.item.button().setTitle_(t("menu.title.paused" if paused else "menu.title.recording", lang))
+        self.today_item.setTitle_(t("menu.open_today", lang))
+        self.delete_parent.setTitle_(t("menu.delete", lang))
+        for item in self.delete_items: item.setTitle_(t("menu.delete.item", lang, span=quick.span(item.tag(), lang)))
         self.toggle_item.setTitle_(t("menu.resume" if paused else "menu.pause", lang))
         self.interval_parent.setTitle_(t("menu.interval", lang))
         self.language_parent.setTitle_(t("menu.language", lang))
@@ -114,11 +146,17 @@ def main():
     controller.item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
     menu = NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
+    controller.today_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "openToday:", "")
+    controller.today_item.setTarget_(controller)
+    menu.addItem_(controller.today_item)
+    menu.addItem_(NSMenuItem.separatorItem())
     controller.toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "toggle:", "")
     controller.toggle_item.setTarget_(controller)
     menu.addItem_(controller.toggle_item)
     controller.interval_parent, controller.interval_items = submenu(controller, menu, "interval:", INTERVALS)
     controller.language_parent, controller.language_items = submenu(controller, menu, "language:", range(len(CHOICES)))
+    menu.addItem_(NSMenuItem.separatorItem())
+    controller.delete_parent, controller.delete_items = submenu(controller, menu, "deleteRecent:", quick.WINDOWS)
     menu.addItem_(NSMenuItem.separatorItem())
     controller.quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "quit:", "")
     controller.quit_item.setTarget_(controller)

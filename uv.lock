@@ -1069,6 +1069,27 @@ wheels = [
 ]
 
 [[package]]
+name = "pyobjc-framework-localauthentication"
+version = "12.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-security" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/5a/24ee91edf0e34b83d847e22a1e66fa2869a29fbcfe0be5c7c1296256e620/pyobjc_framework_localauthentication-12.2.2.tar.gz", hash = "sha256:c7a020a38e6aa279e408f2242e21d7fed0bd66688523e380d9bd0ddd17802c0e", size = 33302, upload-time = "2026-08-11T19:44:48.419Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/83/2b061f5886f8b2ae88c16b5cbe2ad4d8acf7ea870871864c3d344d80ca3b/pyobjc_framework_localauthentication-12.2.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:98a35bb66974593c7fb7c20cb2815785792e47d7e0d8eef7ec5f288c72eeaa3b", size = 10891, upload-time = "2026-08-11T19:37:43.261Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/54/0475812aaf10750ec16da0383dc3cb03cb89c5fdda261f334eb4184216f1/pyobjc_framework_localauthentication-12.2.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:cd2d4c6e21161a7164c02ec99e3eb629bf9805ac8f134d5eb097cd13060a57ac", size = 10907, upload-time = "2026-08-11T19:37:44.24Z" },
+    { url = "https://files.pythonhosted.org/packages/95/e7/57e8015d9afa42acf7c4100eaffa702cd4f9e366306540efcbd8f04fac67/pyobjc_framework_localauthentication-12.2.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:a6d7e664017612cc22e6563ad8ffd92ad788dd788e8deff2933096ef698f3044", size = 10922, upload-time = "2026-08-11T19:37:44.962Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/b8/b073b69e339222fb1bf87b857b55316ac1aa8ace9811ab32d766243f3f8b/pyobjc_framework_localauthentication-12.2.2-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:957e379bdd1767e0566bb920e73423ed25e2c06f188ae881726aff1a7e031b74", size = 11062, upload-time = "2026-08-11T19:37:45.667Z" },
+    { url = "https://files.pythonhosted.org/packages/02/67/d162eba07be7967a1cb2b43db3b253ff2e37167ca311e2c99472b40b3bfa/pyobjc_framework_localauthentication-12.2.2-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:a9d64e919a1373ed8985523758169d63d5dfd8244863f02d234ed5d9f13a2dec", size = 10965, upload-time = "2026-08-11T19:37:46.38Z" },
+    { url = "https://files.pythonhosted.org/packages/23/b3/7fbfd9902758f122955016c5da84fc7d2647dad13011c4f6f97a4f791f91/pyobjc_framework_localauthentication-12.2.2-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:fa530583d0d8d18d1d01b442f28cb860db0cca49db6a68aada56ee6092b86602", size = 11110, upload-time = "2026-08-11T19:37:47.083Z" },
+    { url = "https://files.pythonhosted.org/packages/56/75/9a917165fbd570d2530348f420444aa6bdf0852952fbb986417a721be19f/pyobjc_framework_localauthentication-12.2.2-cp315-cp315-macosx_10_15_universal2.whl", hash = "sha256:43c63c52ac88ad1d2f1db7edd8ca585a5b8e1187701f3469d4305f7b5b0ad95c", size = 10970, upload-time = "2026-08-11T19:37:47.805Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/90/bb24847c0748b187e91d48c8d97beafa0ed125243f35ae7aa9b4c85156bf/pyobjc_framework_localauthentication-12.2.2-cp315-cp315t-macosx_10_15_universal2.whl", hash = "sha256:6bc18b328a42900b054bb355c43048c947cd690bf771cd75c4014e1dfb9b16be", size = 11103, upload-time = "2026-08-11T19:37:48.519Z" },
+]
+
+[[package]]
 name = "pyobjc-framework-quartz"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1107,6 +1128,26 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/e4/4427a313758e50ea06699a509cbde764a26c6cabfe6bc6bb763be69f0f1b/pyobjc_framework_screencapturekit-12.2.2-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:f6ac1e5d599303569c88a63c09e50ba289801bc40608afb3977b87c554566875", size = 11877, upload-time = "2026-08-11T19:41:06.842Z" },
     { url = "https://files.pythonhosted.org/packages/47/01/543afe3b5da651cea12b3fff9fc2638f4b551b7b6225c81222a8a4b0a20b/pyobjc_framework_screencapturekit-12.2.2-cp315-cp315-macosx_10_15_universal2.whl", hash = "sha256:508147c240cddbde87149c2918c780fd3f896238ee290550565957a3c85dffc9", size = 11667, upload-time = "2026-08-11T19:41:07.574Z" },
     { url = "https://files.pythonhosted.org/packages/b5/ab/cfb7fad425532537b6620eba9e78c050cad4219fdd6a725bcf2e1c76e1aa/pyobjc_framework_screencapturekit-12.2.2-cp315-cp315t-macosx_10_15_universal2.whl", hash = "sha256:b052df28a13814b2b2eb25b7585224a4fcbd7ca1c5c711b485bb97be7789810f", size = 11870, upload-time = "2026-08-11T19:41:08.302Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-security"
+version = "12.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c2/92/c304b7fc3a0fe7484a2a3cf25711e70c8fa2b6969d82f4010e35b9af2164/pyobjc_framework_security-12.2.2.tar.gz", hash = "sha256:33efab1ff7d18570148f8f3ddd44eca305f733aee00b9115d5263bef81018f65", size = 181827, upload-time = "2026-08-11T19:45:24.042Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/af/c5d2549be11d583afb38276d14f27ac257b4b18bfbcaf57ea8aee40f5c61/pyobjc_framework_security-12.2.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:a78b6945d4681e319e03757c8039ac4014833ede1d883aa793a286f48fa93bb7", size = 41307, upload-time = "2026-08-11T19:41:26.639Z" },
+    { url = "https://files.pythonhosted.org/packages/15/59/79722efbbb5cf6a313d364bb4faff39f9c165740e46acaa4d0a3d71c0f8c/pyobjc_framework_security-12.2.2-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:266f41995f2fc80660c8451bdb199a7e259a6cad02fbc1e0e2f69dd5576e2203", size = 41298, upload-time = "2026-08-11T19:41:27.54Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/7f/cef885aaf57f7b8c1a5c141dc118094d07558f6c289fabd63690abf30059/pyobjc_framework_security-12.2.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:ca580d5f56e1222d63f1322a4fbf63be0bad77e77cca084290310df007b3fdde", size = 41303, upload-time = "2026-08-11T19:41:28.427Z" },
+    { url = "https://files.pythonhosted.org/packages/87/4b/22e787fa03f44386d559a5bffca4e56f9d125c8616d13fb8c798b5968119/pyobjc_framework_security-12.2.2-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:67655616bd0b9e05bd6a18fa353c5a7bc1743f79f1774644dbb180a2c62bf65b", size = 42175, upload-time = "2026-08-11T19:41:29.188Z" },
+    { url = "https://files.pythonhosted.org/packages/47/b5/4040d093b67a155041325b518148cc432fe17de9968d4ed6f0279140b2a3/pyobjc_framework_security-12.2.2-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:c4726b41c96a611fa13880bcfcb38a32ac9256239adb5b48d559dc4d0c9d0b99", size = 41372, upload-time = "2026-08-11T19:41:30.101Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/3b/0b02750d476dc5c05497f71cdd8f12a02f9a4db00c65d084abf651f4a057/pyobjc_framework_security-12.2.2-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:54b9b7a03f2e4a7e1ac182239d63cb94bc3628293f39637c17d3ececd495a619", size = 42930, upload-time = "2026-08-11T19:41:31.062Z" },
+    { url = "https://files.pythonhosted.org/packages/00/37/7fff93e2e36185b77ad824b00b9ea28ab95dfed110bd36710cc744a93916/pyobjc_framework_security-12.2.2-cp315-cp315-macosx_10_15_universal2.whl", hash = "sha256:786da49c319318bb4cf168755d4a9324a6b3720a3dd7503990249c2a27b661ee", size = 41376, upload-time = "2026-08-11T19:41:31.907Z" },
+    { url = "https://files.pythonhosted.org/packages/04/36/0dd489faa827bc56d2cf0de0e27a8bdba5267549e8f442a2407166be0f51/pyobjc_framework_security-12.2.2-cp315-cp315t-macosx_10_15_universal2.whl", hash = "sha256:f5afda32efbfdef150e921563b94a799ea104e575f4a95b8c5cd71a2322413a8", size = 42944, upload-time = "2026-08-11T19:41:32.694Z" },
 ]
 
 [[package]]
@@ -1347,6 +1388,7 @@ encrypted = [
 ]
 macos = [
     { name = "pyobjc-framework-cocoa" },
+    { name = "pyobjc-framework-localauthentication" },
     { name = "pyobjc-framework-quartz" },
     { name = "pyobjc-framework-screencapturekit" },
     { name = "pyobjc-framework-vision" },
@@ -1359,6 +1401,7 @@ windows = [
     { name = "winrt-windows-globalization" },
     { name = "winrt-windows-graphics-imaging" },
     { name = "winrt-windows-media-ocr" },
+    { name = "winrt-windows-security-credentials-ui" },
     { name = "winrt-windows-storage" },
     { name = "winrt-windows-storage-streams" },
 ]
@@ -1373,6 +1416,7 @@ requires-dist = [
     { name = "psutil", marker = "extra == 'windows'", specifier = ">=6" },
     { name = "py2app", marker = "sys_platform == 'darwin' and extra == 'dev'", specifier = ">=0.28" },
     { name = "pyobjc-framework-cocoa", marker = "extra == 'macos'", specifier = ">=11" },
+    { name = "pyobjc-framework-localauthentication", marker = "extra == 'macos'", specifier = ">=11" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'macos'", specifier = ">=11" },
     { name = "pyobjc-framework-screencapturekit", marker = "extra == 'macos'", specifier = ">=11" },
     { name = "pyobjc-framework-vision", marker = "extra == 'macos'", specifier = ">=11" },
@@ -1385,6 +1429,7 @@ requires-dist = [
     { name = "winrt-windows-globalization", marker = "extra == 'windows'" },
     { name = "winrt-windows-graphics-imaging", marker = "extra == 'windows'" },
     { name = "winrt-windows-media-ocr", marker = "extra == 'windows'" },
+    { name = "winrt-windows-security-credentials-ui", marker = "extra == 'windows'" },
     { name = "winrt-windows-storage", marker = "extra == 'windows'" },
     { name = "winrt-windows-storage-streams", marker = "extra == 'windows'" },
 ]
@@ -1703,6 +1748,29 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/81/ab/2542c775fda7ebca4629736d73d59c28fe3b5cd56ddfccb6b5e1f1232153/winrt_windows_media_ocr-3.2.1-cp314-cp314-win32.whl", hash = "sha256:c67fa675947e40f13c58ef4a1c49f8c779d3e6f1fdc91733a506a5e41ebf0007", size = 42227, upload-time = "2025-09-20T07:14:42.207Z" },
     { url = "https://files.pythonhosted.org/packages/f0/ce/719e981c55cec68feab1fab2e5012938c0846247ba3af30face2ca41a3ad/winrt_windows_media_ocr-3.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:31a620f6704cf8a27bc38a5e4f7a7888c935aecc5443c6dfbfddca331259e2af", size = 43578, upload-time = "2025-09-20T07:14:42.936Z" },
     { url = "https://files.pythonhosted.org/packages/d4/52/c39c0d5cc1e9f506a09b28ad40c51a183cf62e454dc30fa17c1ef16554e5/winrt_windows_media_ocr-3.2.1-cp314-cp314-win_arm64.whl", hash = "sha256:e731cf200a4731f53c0e40fba72e0312e895f80ab4e3574dc45ef3b1e35509ef", size = 40765, upload-time = "2025-09-20T07:14:43.679Z" },
+]
+
+[[package]]
+name = "winrt-windows-security-credentials-ui"
+version = "3.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "winrt-runtime" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bd/e4/231502379b5b1428a4eed4a306034fc84e2809a0e9cd2f0ebfc864af1f77/winrt_windows_security_credentials_ui-3.2.1.tar.gz", hash = "sha256:51e3c8182cd558123c4b4eb321692e78be38dc84e43d2d1aebe95415b3c74071", size = 8630, upload-time = "2025-06-06T14:43:06.776Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/da/cf5986b676a1b56a746f28ca642c0824ca1a62178eb33052feea96bf98b4/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win32.whl", hash = "sha256:ab1fc909d9bd8fb1877587598a4df95b73aebbad9f3e43f6b83ed7f9e50ae03b", size = 40567, upload-time = "2025-06-06T13:56:11.457Z" },
+    { url = "https://files.pythonhosted.org/packages/24/7c/2879d246b85e84f01d8fe482f4a28abae6983ae93d1d6017c9b1f76c8402/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:71bbafdcc0390953bfbf96a1afd5b2468208fe76cfc13feba4f9b80afabd1726", size = 44255, upload-time = "2025-06-06T13:56:12.414Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/f8/b5136b353da0f3f309a365cbe879f37409ea0d041dc4e5f68db414ed20b0/winrt_windows_security_credentials_ui-3.2.1-cp311-cp311-win_arm64.whl", hash = "sha256:5adb5f26009d0ebe416f623b74fa6a80ff4798c9daf7f6c08b2edc3da7c701a8", size = 39583, upload-time = "2025-06-06T13:56:13.523Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/95/d3fb570ec66f4f7277593ebcd9f26aae724e34a9263309e0bc53b14a517f/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win32.whl", hash = "sha256:6d722644b3cf1616b884f1f9624c999643528bd1adfd7f62a83773dac643aea0", size = 40649, upload-time = "2025-06-06T13:56:14.255Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/b2/4a624aca886207c10bc9f524ee45f53063c0115d6c483ebaee9b72f7e6f9/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win_amd64.whl", hash = "sha256:0af712c9a014e4b683cd6aa8e006edb758e08f8e03c6092c697b8e2cd3e8040d", size = 44137, upload-time = "2025-06-06T13:56:14.996Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/56/d4070306b11be25266b21a1aaea44be664998637cb29504ec7c160d03bd1/winrt_windows_security_credentials_ui-3.2.1-cp312-cp312-win_arm64.whl", hash = "sha256:ce563731240d36c02379c7f50d072603c471c10fad909c3cd72aa72f08d228a7", size = 39570, upload-time = "2025-06-06T13:56:15.74Z" },
+    { url = "https://files.pythonhosted.org/packages/be/63/08c59b89bd273210c68da38bc5ea8550b4b19301e2cc1fff84a0736e0c7b/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win32.whl", hash = "sha256:b2b7e9c0df9e42ea6695cc89e53543ffb8999fee9e80ec40ecc9c599ca80107e", size = 40655, upload-time = "2025-06-06T13:56:16.572Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/35/fd661aa8a65ec7d7a6bda8ca06508ffc6b7263d1b947de37856c81a46a2f/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win_amd64.whl", hash = "sha256:ae1b757d8bb13a30c4ac6732c4cba3128a55f5126a4496f96d8f513837d30406", size = 44142, upload-time = "2025-06-06T13:56:17.305Z" },
+    { url = "https://files.pythonhosted.org/packages/db/55/3f42d0519b61b60f7a8a77fa807acbf46bb62675078033e383fc59947313/winrt_windows_security_credentials_ui-3.2.1-cp313-cp313-win_arm64.whl", hash = "sha256:aa13db73b4ed9004527636271cabfe216d461c8274e97de8ee0021432d636a70", size = 39564, upload-time = "2025-06-06T13:56:18.285Z" },
+    { url = "https://files.pythonhosted.org/packages/70/27/fa8a167fea60dec204d250372f36a07c10696617e536a91a55866127db65/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win32.whl", hash = "sha256:31a34701e3b7ececf1d592535ffaaffff393fb44654b4c71e1dd46992ad012bb", size = 41968, upload-time = "2025-09-20T07:16:12.817Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/3f/3b847694def127ea8dd012d270e89ea64eb5baacde2626ed7b8f5567dd1c/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win_amd64.whl", hash = "sha256:fafec6121b65ddcd3d2e0ebd3b2f729a0a8db2eaff0427e5c12a46c36cd1498a", size = 45287, upload-time = "2025-09-20T07:16:13.6Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/a8/bcd55a1ef43ab7ec91025c3b9f79b510d34969ecb703082f92bf7358230f/winrt_windows_security_credentials_ui-3.2.1-cp314-cp314-win_arm64.whl", hash = "sha256:a5874c9876de1bb99601718be3effbead759d607f14f6b6edbee15bcc046190b", size = 40873, upload-time = "2025-09-20T07:16:14.941Z" },
 ]
 
 [[package]]

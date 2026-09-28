@@ -69,7 +69,21 @@ CREATE TABLE IF NOT EXISTS skip_counts (
 );
 """
 
-MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2, 3: SCHEMA_V3}
+# Work sessions (#29): the capture process records presence transitions; the Resume card's
+# feedback stays in this database and is never served over MCP.
+SCHEMA_V4 = """
+CREATE TABLE IF NOT EXISTS presence (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL,
+ state TEXT NOT NULL CHECK (state IN ('active', 'idle', 'locked', 'paused'))
+);
+CREATE INDEX IF NOT EXISTS presence_ts ON presence(ts);
+CREATE TABLE IF NOT EXISTS feedback (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, verdict TEXT NOT NULL CHECK (verdict IN ('helpful', 'off')),
+ session_start REAL NOT NULL, session_end REAL NOT NULL, idle_minutes INTEGER NOT NULL
+);
+"""
+
+MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
