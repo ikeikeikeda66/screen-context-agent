@@ -187,7 +187,8 @@ def test_sweep_keeps_the_process_while_a_session_or_launch_link_is_live(sessions
     assert sessions.sweep() is True
 
 
-def test_page_text_follows_the_language(settings, sessions):
+def test_page_text_follows_the_language(settings, sessions, monkeypatch):
+    monkeypatch.delenv("SCREEN_CONTEXT_LANG")
     settings.set_language("ja")
     async def steps(client):
         await opened(client, sessions)
