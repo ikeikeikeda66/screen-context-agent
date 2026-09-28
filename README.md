@@ -12,7 +12,7 @@
 
 <p align="center"><a href="README.ja.md">日本語</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="https://x.com/ikeikeikeda6">X</a></p>
 
-ScreenContext records the foreground window, reads its text with the operating system's built-in OCR, keeps an encrypted local history, and exposes that history to AI assistants through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Any MCP client can use it: Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI, Gemini CLI and others.
+ScreenContext records the foreground window, reads its text with the operating system's built-in OCR, keeps an encrypted local history, and lets AI assistants search that history through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Setup presets are provided for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI and Gemini CLI; other MCP clients can use the generic configuration.
 
 Ask your assistant things like "find the error message I was looking at in the browser a moment ago" or "what was the spec page I read this morning?".
 
@@ -22,6 +22,19 @@ Ask your assistant things like "find the error message I was looking at in the b
 | Windows 10/11 | **Beta** (control window + CLI). Checked on one Windows 11 machine; see [Windows (beta)](#windows-beta). |
 
 Current version: **0.2.0**. Changes: [CHANGELOG.md](CHANGELOG.md). License: [MIT](LICENSE).
+
+## Try ScreenContext
+
+ScreenContext currently runs from source. Choose your platform guide before installing:
+
+| Platform | Status and setup |
+|---|---|
+| macOS 14+ | Supported. Build the menu bar app on the Mac that will run it; the app is not notarized and there is no ready-to-download installer. [macOS setup](#quick-start-macos) |
+| Windows 10/11 x64 | **Beta**. Run the control window from source, or build the portable package on Windows. Real-device testing is limited; ARM64 is untested. [Windows setup and limitations](#windows-beta) |
+
+After starting capture and the indexer, generate a client configuration with `screen-context mcp-config --client <name>`. The supported client names and setup details are in [Connect an MCP client](#connect-an-mcp-client). On first use, approve that client in the ScreenContext app. Then try asking your assistant: “Find the error message I was looking at in the browser a moment ago.”
+
+Screen history stays in the local encrypted store. Lookups require an approved client, and you can inspect or revoke client access. OCR can misread text, and exclusions cannot catch every sensitive screen; review [What is recorded](#what-is-recorded) and [Known limitations](#known-limitations) before enabling capture.
 
 ## What 0.2 adds
 

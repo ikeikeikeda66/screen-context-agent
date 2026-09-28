@@ -12,7 +12,7 @@
 
 <p align="center"><a href="README.md">English</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">リリース一覧</a> · <a href="CHANGELOG.md">変更履歴</a> · <a href="https://x.com/ikeikeikeda6">Xプロフィール</a></p>
 
-ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字を読み取り、暗号化したローカル履歴に保存します。その履歴を [Model Context Protocol (MCP)](https://modelcontextprotocol.io) で AI アシスタントに提供します。Claude Code、Claude Desktop、Cursor、VS Code、Windsurf、Codex CLI、Gemini CLI など、MCP に対応したクライアントから利用できます。
+ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字を読み取り、暗号化したローカル履歴に保存します。[Model Context Protocol (MCP)](https://modelcontextprotocol.io) を通じて AI アシスタントから履歴を検索できます。Claude Code、Claude Desktop、Cursor、VS Code、Windsurf、Codex CLI、Gemini CLI 用の設定出力に対応し、それ以外の MCP クライアントには汎用設定を使えます。
 
 「さっきブラウザで見ていたエラーメッセージを探して」「今朝読んだ仕様書のページは？」のように依頼して使います。
 
@@ -22,6 +22,19 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 | Windows 10/11 | **ベータ版**（操作ウィンドウ + CLI）。実機での確認は Windows 11 の 1 台です。[Windows（ベータ版）](#windowsベータ版)を参照してください。 |
 
 現在のバージョン: **0.2.0**。変更点: [CHANGELOG.md](CHANGELOG.md)。ライセンス: [MIT](LICENSE)。
+
+## まず試す
+
+現在はソースから実行します。使う OS の手順と制限を確認してください。
+
+| OS | 状態とセットアップ |
+|---|---|
+| macOS 14 以降 | 対応。利用する Mac 上でメニューバーアプリをビルドします。公証済みアプリや、そのまま使えるインストーラーはありません。[macOS の手順](#はじめかたmacos) |
+| Windows 10/11 x64 | **ベータ版**。ソースから操作ウィンドウを起動するか、Windows 上でポータブル版をビルドします。実機での確認は限られており、ARM64 は未確認です。[Windows の手順と制限](#windowsベータ版) |
+
+撮影と indexer を起動したら、`screen-context mcp-config --client <name>` でクライアント設定を出力します。対応クライアント名と設定先は [MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。初回利用時に ScreenContext アプリでクライアントを承認します。接続後は、たとえば「さっきブラウザで見ていたエラーを探して」とアシスタントに頼めます。
+
+画面履歴は暗号化したローカルストアに保存します。承認済みクライアントだけが検索でき、アクセス状況の確認や失効もできます。一方、OCR は文字を読み違えることがあり、機微な画面をすべて除外できるわけではありません。撮影を有効にする前に[記録する内容](#記録する内容)と[既知の制限](#既知の制限)を確認してください。
 
 ## 0.2 で追加したもの
 
