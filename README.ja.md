@@ -32,7 +32,7 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 | macOS 14 以降 | 対応。利用する Mac 上でメニューバーアプリをビルドします。公証済みアプリや、そのまま使えるインストーラーはありません。[macOS の手順](#はじめかたmacos) |
 | Windows 10/11 x64 | **ベータ版**。ソースから操作ウィンドウを起動するか、Windows 上でポータブル版をビルドします。実機での確認は限られており、ARM64 は未確認です。[Windows の手順と制限](#windowsベータ版) |
 
-撮影と indexer を起動したら、`screen-context mcp-config --client <name>` でクライアント設定を出力します。対応クライアント名と設定先は [MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。初回利用時に ScreenContext アプリでクライアントを承認します。接続後は、たとえば「さっきブラウザで見ていたエラーを探して」とアシスタントに頼めます。
+アプリ（撮影と indexer を実行します）を起動したら、`screen-context mcp-config --client <name>` でクライアント設定を出力します。対応クライアント名と設定先は [MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。初回利用時に ScreenContext アプリでクライアントを承認します。接続後は、たとえば「さっきブラウザで見ていたエラーを探して」とアシスタントに頼めます。
 
 画面履歴は暗号化したローカルストアに保存します。承認済みクライアントだけが検索でき、アクセス状況の確認や失効もできます。一方、OCR は文字を読み違えることがあり、機微な画面をすべて除外できるわけではありません。撮影を有効にする前に[記録する内容](#記録する内容)と[既知の制限](#既知の制限)を確認してください。
 
@@ -76,15 +76,7 @@ uv sync --locked --extra macos --extra encrypted --extra dev
 
 `init` は `~/Library/Application Support/ScreenContext` を作成し、ランダムな暗号鍵を macOS のキーチェーンに保存します。鍵を失うと履歴を復号できません。`screen-context backup` でパスフレーズ付きの控えを作れます。
 
-**2. indexer の起動**
-
-```sh
-.venv/bin/screen-context index --watch
-```
-
-ログイン時に自動で起動する方法は [packaging/macos/README.md](packaging/macos/README.md)（英語）を参照してください。
-
-**3. メニューバーアプリのビルド・署名・起動**
+**2. メニューバーアプリのビルド・署名・起動**
 
 画面収録の権限は署名済みのアプリに付与されるため、撮影はターミナルではなくアプリから行います。毎回同じ署名でビルドすれば、再ビルド後も権限が維持されます。
 
@@ -94,13 +86,15 @@ SCREEN_CONTEXT_SIGN_IDENTITY="ScreenContext Local Signing" sh packaging/build_ma
 open dist/ScreenContext.app
 ```
 
-システム設定 > プライバシーとセキュリティ > 画面収録で ScreenContext を許可し、アプリを開き直してください。再ビルドの後、`codesign` が署名用の鍵を使ってよいか一度だけ確認されることがあります。「常に許可」を選んでください。
+システム設定 > プライバシーとセキュリティ > 画面収録で ScreenContext を許可し、アプリを開き直してください。アプリは撮影と indexer（OCR）の両方を実行し、indexer が動いているかをメニューに表示します。メニューの「**ログイン時に起動**」をオンにすると、Mac の起動時に自動で開きます。再ビルドの後、`codesign` が署名用の鍵を使ってよいか一度だけ確認されることがあります。「常に許可」を選んでください。
 
 - Developer ID の署名でも同じように使えます。`SCREEN_CONTEXT_SIGN_IDENTITY=-`（アドホック署名）でもビルドできますが、再ビルドのたびに権限を付け直す必要があります。
 - アプリは公証（notarization）を受けていません。使う Mac の上でビルドしてください。他の Mac からダウンロード・コピーしたアプリは Gatekeeper に止められます。
 - ターミナル自身の権限で 1 回だけ試す場合は `.venv/bin/screen-context capture --once` を使います。
+- アプリを使わずに indexer だけを動かす場合（撮影済みの画面を OCR するときなど）は、ターミナルで `.venv/bin/screen-context index --watch` を実行します。indexer は1つしか動かせないため、アプリを開いている間は実行しないでください。
+- 以前のバージョンで indexer の LaunchAgent を登録していた場合、アプリの初回起動時に削除を提案します。詳しくは [packaging/macos/README.md](packaging/macos/README.md)（英語）を参照してください。
 
-**4. アシスタントの接続**：[MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。
+**3. アシスタントの接続**：[MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。
 
 ### メニューバー
 

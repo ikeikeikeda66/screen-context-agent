@@ -29,7 +29,7 @@
 
 On Windows the capture loop checks whether the session is locked (the input desktop cannot be opened or switched to) and starts no capture then, because the capture library can crash natively when the lock screen takes over (#47). The Windows control window restarts a worker that exits abnormally, at most 3 times in 10 minutes, and records the restart in `capture-status.json`; after that it stops both workers as before.
 
-The capture and indexer processes coordinate with lock files (`capture.lock`, `indexer.lock`) and status files (`capture-status.json`, `index-status.json`). `health.py` combines them with the session state to tell `paused`, `capture_stopped`, `permission_error`, `locked`, `indexer_stopped`, `indexing_delayed`, `idle` and `active` apart.
+On macOS the menu bar app runs capture on its main thread and the indexer as a child process (`screen-context index --watch` under `desktop.Workers`, restarted after a crash; `launch.py`, #34). The Windows control window runs both as worker processes. The capture and indexer processes coordinate with lock files (`capture.lock`, `indexer.lock`) and status files (`capture-status.json`, `index-status.json`). `health.py` combines them with the session state to tell `paused`, `capture_stopped`, `permission_error`, `locked`, `indexer_stopped`, `indexing_delayed`, `idle` and `active` apart.
 
 ## Data
 

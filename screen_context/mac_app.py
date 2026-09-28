@@ -4,7 +4,7 @@ import threading
 import objc
 from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny
 from Foundation import NSObject, NSDate, NSDefaultRunLoopMode
-from . import quick, reauth
+from . import launch, quick, reauth
 from .config import Settings
 from .i18n import CHOICES, auth, interval_label, resolve, t
 
@@ -63,6 +63,17 @@ class MenuController(NSObject):
         except Exception as error:
             self.showError(t("error.purge", lang, error=type(error).__name__))
 
+    def loginToggle_(self, sender):
+        """Start at login through the app's own login item (#34)."""
+        lang = self.lang()
+        try:
+            from ServiceManagement import SMAppService
+            result = launch.toggle_login(self.login, SMAppService.openSystemSettingsLoginItems)
+            if result in ("approval", "failed"): self.showError(t("login." + result, lang))
+        except Exception as error:
+            self.showError(t("login.failed", lang) + f" ({type(error).__name__})")
+        self.refresh()
+
     def quit_(self, sender):
         self.stop.set()
 
@@ -88,6 +99,12 @@ class MenuController(NSObject):
         self.interval_parent.setTitle_(t("menu.interval", lang))
         self.language_parent.setTitle_(t("menu.language", lang))
         self.quit_item.setTitle_(t("menu.quit", lang))
+        self.login_item.setTitle_(t("menu.login", lang))
+        self.login_item.setEnabled_(self.login is not None)
+        self.login_item.setState_(int(launch.login_enabled(self.login)))
+        # The indexer is polled here, so a crashed one is restarted (up to 3 times in 10 minutes).
+        state = self.workers.poll().get("index", "stopped") if self.workers else self.indexer_note
+        self.indexer_item.setTitle_(t("menu.indexer." + state, lang))
         interval = self.settings.capture_interval()
         for item in self.interval_items:
             item.setTitle_(interval_label(item.tag(), lang))
@@ -158,17 +175,50 @@ def main():
     menu.addItem_(NSMenuItem.separatorItem())
     controller.delete_parent, controller.delete_items = submenu(controller, menu, "deleteRecent:", quick.WINDOWS)
     menu.addItem_(NSMenuItem.separatorItem())
+    controller.indexer_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", None, "")
+    controller.indexer_item.setEnabled_(False)
+    menu.addItem_(controller.indexer_item)
+    controller.login = launch.login_service()
+    controller.login_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "loginToggle:", "")
+    controller.login_item.setTarget_(controller)
+    menu.addItem_(controller.login_item)
+    menu.addItem_(NSMenuItem.separatorItem())
     controller.quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "quit:", "")
     controller.quit_item.setTarget_(controller)
     menu.addItem_(controller.quit_item)
     controller.item.setMenu_(menu)
+    controller.workers, controller.indexer_note = None, "stopped"
     controller.refresh()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: controller.stop.set())
     try:
         with lock(settings.root / "capture.lock"):
+            start_indexer(controller, settings)
             run(settings, stop=CocoaStop(controller))
     except Exception as error:
         controller.showError(t("error.start", controller.lang(), error=type(error).__name__))
     finally:
+        stop_indexer(controller)
         NSStatusBar.systemStatusBar().removeStatusItem_(controller.item)
+
+
+def start_indexer(controller, settings):
+    """Run the indexer as a child of the app (#34), after offering to remove an old LaunchAgent."""
+    lang = controller.lang()
+
+    def ask_remove():
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(t("legacy.title", lang))
+        alert.setInformativeText_(t("legacy.body", lang, label=launch.LEGACY_LABEL))
+        alert.addButtonWithTitle_(t("legacy.remove", lang))    # first button: the default (Return)
+        alert.addButtonWithTitle_(t("legacy.keep", lang))
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        return alert.runModal() != NSAlertSecondButtonReturn
+
+    controller.workers, note = launch.start_indexer(settings, ask_remove, controller.showError, lang)
+    controller.indexer_note = note or "stopped"
+    controller.refresh()
+
+
+def stop_indexer(controller):
+    launch.stop_indexer(controller.workers)

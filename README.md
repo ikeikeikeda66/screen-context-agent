@@ -32,7 +32,7 @@ ScreenContext currently runs from source. Choose your platform guide before inst
 | macOS 14+ | Supported. Build the menu bar app on the Mac that will run it; the app is not notarized and there is no ready-to-download installer. [macOS setup](#quick-start-macos) |
 | Windows 10/11 x64 | **Beta**. Run the control window from source, or build the portable package on Windows. Real-device testing is limited; ARM64 is untested. [Windows setup and limitations](#windows-beta) |
 
-After starting capture and the indexer, generate a client configuration with `screen-context mcp-config --client <name>`. The supported client names and setup details are in [Connect an MCP client](#connect-an-mcp-client). On first use, approve that client in the ScreenContext app. Then try asking your assistant: “Find the error message I was looking at in the browser a moment ago.”
+After starting the app (it runs capture and the indexer), generate a client configuration with `screen-context mcp-config --client <name>`. The supported client names and setup details are in [Connect an MCP client](#connect-an-mcp-client). On first use, approve that client in the ScreenContext app. Then try asking your assistant: “Find the error message I was looking at in the browser a moment ago.”
 
 Screen history stays in the local encrypted store. Lookups require an approved client, and you can inspect or revoke client access. OCR can misread text, and exclusions cannot catch every sensitive screen; review [What is recorded](#what-is-recorded) and [Known limitations](#known-limitations) before enabling capture.
 
@@ -76,15 +76,7 @@ uv sync --locked --extra macos --extra encrypted --extra dev
 
 `init` creates `~/Library/Application Support/ScreenContext` and stores a random encryption key in the macOS Keychain. If you lose the key, the history cannot be decrypted; `screen-context backup` keeps a passphrase-protected copy.
 
-**2. Start the indexer**
-
-```sh
-.venv/bin/screen-context index --watch
-```
-
-To start it at login instead, see [packaging/macos/README.md](packaging/macos/README.md).
-
-**3. Build, sign and start the menu bar app**
+**2. Build, sign and start the menu bar app**
 
 macOS grants Screen Recording permission to a signed app, so capture runs from the app, not from the terminal. Sign every build with the same identity and the permission survives rebuilds:
 
@@ -94,13 +86,15 @@ SCREEN_CONTEXT_SIGN_IDENTITY="ScreenContext Local Signing" sh packaging/build_ma
 open dist/ScreenContext.app
 ```
 
-Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, then open the app again. After a rebuild, macOS may ask once whether `codesign` may use the signing key; choose Always Allow.
+Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, then open the app again. The app runs both capture and the indexer (OCR); the menu shows whether the indexer is running. Turn on **Start at Login** in its menu to start it with your Mac. After a rebuild, macOS may ask once whether `codesign` may use the signing key; choose Always Allow.
 
 - A Developer ID identity works the same way. `SCREEN_CONTEXT_SIGN_IDENTITY=-` (ad hoc) also builds, but the permission must be granted again after every rebuild.
 - The app is not notarized. Build it on the Mac that runs it: a copy downloaded or moved from another Mac is blocked by Gatekeeper.
 - To try capture once with the terminal's own permission: `.venv/bin/screen-context capture --once`.
+- Without the app (for example to OCR frames captured earlier), run the indexer in a terminal: `.venv/bin/screen-context index --watch`. Do not run it while the app is open; only one indexer can run.
+- If you set up the indexer LaunchAgent from an earlier version, the app offers to remove it on first start. See [packaging/macos/README.md](packaging/macos/README.md).
 
-**4. Connect your assistant**: see [Connect an MCP client](#connect-an-mcp-client).
+**3. Connect your assistant**: see [Connect an MCP client](#connect-an-mcp-client).
 
 ### Menu bar
 
