@@ -50,9 +50,40 @@ def windows_locked():
         user.CloseDesktop.argtypes = [wintypes.HANDLE]
         desktop = user.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
         if not desktop: return True
-        try: return not user.SwitchDesktop(desktop)
+        try: switched = user.SwitchDesktop(desktop)
         finally: user.CloseDesktop(desktop)
+        if not switched: return True
+        return foreground_is_lock_screen(user)
     except Exception: return None
+
+
+LOCK_SCREEN_PROCESSES = ("lockapp.exe", "logonui.exe")
+
+
+def foreground_is_lock_screen(user):
+    """The Windows 10/11 lock screen is LockApp.exe on the user's own desktop, so the input-desktop
+    check alone reports "unlocked" while it is showing (verified on Windows 11, #60)."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32")
+    user.GetForegroundWindow.restype = wintypes.HWND
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    hwnd = user.GetForegroundWindow()
+    if not hwnd: return False
+    pid = wintypes.DWORD()
+    user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    handle = kernel.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle: return False
+    try:
+        size = wintypes.DWORD(520)
+        path = ctypes.create_unicode_buffer(size.value)
+        if not kernel.QueryFullProcessImageNameW(handle, 0, path, ctypes.byref(size)): return False
+        return path.value.replace("/", "\\").rsplit("\\", 1)[-1].lower() in LOCK_SCREEN_PROCESSES
+    finally: kernel.CloseHandle(handle)
 
 
 def screen_locked():

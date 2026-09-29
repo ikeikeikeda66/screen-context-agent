@@ -31,8 +31,14 @@ class Backend:
         process with an access violation that no Python handler can catch (#47)."""
         desktop = self.user.OpenInputDesktop(0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
         if not desktop: return True  # the input desktop is not ours: locked or secure
-        try: return not self.user.SwitchDesktop(desktop)
+        try: switched = self.user.SwitchDesktop(desktop)
         finally: self.user.CloseDesktop(desktop)
+        if not switched: return True
+        # The Windows 10/11 lock screen is LockApp.exe on the user's own desktop, where the check
+        # above passes (#60), so look at what has the foreground too.
+        from screen_context.health import foreground_is_lock_screen
+        try: return foreground_is_lock_screen(self.user)
+        except OSError: return False
 
     def window_identity(self, hwnd):
         import psutil
