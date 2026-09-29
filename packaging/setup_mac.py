@@ -16,7 +16,7 @@ setup(
         "includes": ["_cffi_backend", "sqlcipher3.dbapi2", "keyring.backends.macOS"],
         # uvicorn loads its loop and protocol modules by name at run time, which the import scan misses;
         # the Today view (`ui`, started from the menu) needs them.
-        "packages": ["screen_context", "PIL", "cryptography", "keyring", "objc", "Foundation", "AppKit", "Quartz", "ScreenCaptureKit", "LocalAuthentication",
+        "packages": ["screen_context", "PIL", "cryptography", "keyring", "objc", "Foundation", "AppKit", "Quartz", "ScreenCaptureKit", "LocalAuthentication", "ServiceManagement",
                      "starlette", "uvicorn", "h11", "anyio"],
         "plist": {"CFBundleName": "ScreenContext", "CFBundleDisplayName": "Screen Context", "CFBundleIdentifier": "local.screencontext.capture", "CFBundleVersion": "0.2.0", "CFBundleShortVersionString": "0.2.0", "LSUIElement": True, "CFBundleDevelopmentRegion": "en", "CFBundleLocalizations": ["en", "ja"], "LSMinimumSystemVersion": "14.0"},
     }},

@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- macOS: the menu bar app runs the indexer itself (`screen-context index --watch` as a child process, restarted after a crash) and shows its state in the menu. **Start at Login** uses the app's own login item. On first start the app offers to remove the old `local.screencontext.indexer` LaunchAgent (#34).
 - `screen-context ui`: a local web UI with a one-time link, Host/Origin checks, confirmed writes, and a session that ends after 5 idle minutes or on screen lock (#26).
 - Today view: digest by app and by site, pages viewed, intervals, full-text search with context and previews, date navigation, and copy for your assistant (#28).
 - "Where you left off" card with work sessions and local-only feedback; `screen-context sessions` (#29).
@@ -16,7 +17,7 @@
 - Windows: `health` reports a locked session.
 - Windows control window: "Open Today…" (after Windows Hello or the sign-in password) and "Delete Recent" (last 5 min, 15 min or hour, the same purge path) (#33).
 
-日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
 
 ## 0.2.0 — Trust foundation / 信頼の土台
 

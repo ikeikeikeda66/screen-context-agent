@@ -54,16 +54,28 @@ def delete_recent(settings, minutes, lang, ask, tell):
     return result
 
 
-def ui_command():
-    """The command that starts the Today view. In the app bundle, py2app's launcher (EXECUTABLEPATH)
+def cli_command():
+    """How this installation runs the CLI. In the app bundle, py2app's launcher (EXECUTABLEPATH)
     with an argument runs the CLI instead of the menu bar (packaging/mac_main.py). The frozen Windows
-    control window starts the CLI executable next to it."""
+    control window runs the CLI executable next to it."""
     launcher = os.environ.get("EXECUTABLEPATH")
-    if getattr(sys, "frozen", None) == "macosx_app" and launcher: return [launcher, "ui"]
+    if getattr(sys, "frozen", None) == "macosx_app" and launcher: return [launcher]
     if sys.platform == "win32":
-        from .windows_app import cli_command
-        return [*cli_command(), "ui"]
-    return [sys.executable, "-m", "screen_context.cli", "ui"]
+        from .windows_app import cli_command as windows_cli
+        return windows_cli()
+    return [sys.executable, "-m", "screen_context.cli"]
+
+
+def ui_command():
+    """The command that starts the Today view."""
+    return [*cli_command(), "ui"]
+
+
+def child_env(settings):
+    """Environment for a CLI child process: the same data folder and mode as this process."""
+    env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root)}
+    if settings.plaintext: env["SCREEN_CONTEXT_PLAINTEXT"] = "1"
+    return env
 
 
 def open_today(settings, authenticate, spawn=subprocess.Popen):
@@ -73,8 +85,7 @@ def open_today(settings, authenticate, spawn=subprocess.Popen):
     from .reauth import VERIFIED
     status = authenticate()
     if status != VERIFIED: return status
-    env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root)}
-    if settings.plaintext: env["SCREEN_CONTEXT_PLAINTEXT"] = "1"
+    env = child_env(settings)
     # Windows: no console window for the CLI; start_new_session is POSIX only and ignored there.
     extra = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # CREATE_NO_WINDOW
     spawn(ui_command(), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

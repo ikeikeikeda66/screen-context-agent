@@ -24,10 +24,46 @@ def worker(kind, settings, stop):
             raise ValueError("Unknown worker")
 
 
+class CommandProcess:
+    """A worker run as a CLI child process (`screen-context index --watch`), with the interface of
+    multiprocessing.Process that Workers uses. The macOS app uses it for the indexer (#34): the
+    frozen app's launcher runs the CLI when given arguments, which avoids multiprocessing's spawn
+    inside a py2app bundle. The child exits cleanly on SIGTERM, which stop() sends."""
+    def __init__(self, argv, env=None, log=None, popen=None):
+        import subprocess
+        self.argv, self.env, self.log = argv, env, log
+        self.popen = popen or subprocess.Popen
+        self.process = None
+
+    def start(self):
+        import subprocess
+        out = open(self.log, "ab") if self.log else subprocess.DEVNULL
+        try:
+            self.process = self.popen(self.argv, env=self.env, stdin=subprocess.DEVNULL, stdout=out, stderr=out)
+        finally:
+            if self.log: out.close()
+
+    def is_alive(self): return self.process is not None and self.process.poll() is None
+
+    @property
+    def exitcode(self): return None if self.process is None else self.process.poll()
+
+    def terminate(self):
+        if self.is_alive(): self.process.terminate()
+
+    def join(self, timeout=None):
+        import subprocess
+        if self.process is None: return
+        try: self.process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired: pass
+
+
 class Workers:
-    def __init__(self, settings, context=None, max_restarts=3, window=600):
+    def __init__(self, settings, context=None, max_restarts=3, window=600, kinds=("index", "capture"), command=None):
         self.settings = settings
         self.context = context or multiprocessing.get_context("spawn")
+        # `command(kind)` returns a started-on-demand CommandProcess instead of a multiprocessing one.
+        self.kinds, self.command = kinds, command
         self.processes = {}
         self.stop_event = None
         self.stopping = False
@@ -43,13 +79,14 @@ class Workers:
         self.stop_event = self.context.Event()
         self.stopping = False
         try:
-            for kind in ("index", "capture"): self.spawn(kind)
+            for kind in self.kinds: self.spawn(kind)
         except Exception:
             self.stop()
             raise
 
     def spawn(self, kind):
-        p = self.context.Process(target=worker, args=(kind, self.settings, self.stop_event), name="ScreenContext-"+kind)
+        if self.command: p = self.command(kind)
+        else: p = self.context.Process(target=worker, args=(kind, self.settings, self.stop_event), name="ScreenContext-"+kind)
         p.start()
         self.processes[kind] = p
 
@@ -70,6 +107,8 @@ class Workers:
     def stop(self):
         self.stopping = True
         if self.stop_event is not None: self.stop_event.set()
+        for p in self.processes.values():
+            if hasattr(p, "terminate") and self.command: p.terminate()  # CLI children do not see stop_event
 
     def poll(self):
         states = {}
