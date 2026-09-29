@@ -132,7 +132,10 @@ def test_approval_dialogs_come_to_the_front_and_default_to_deny(monkeypatch, tmp
     monkeypatch.setenv("SCREEN_CONTEXT_HOME", str(tmp_path))
     calls = []
     adapter = Backend.__new__(Backend)
-    adapter.user = SimpleNamespace(MessageBoxW=lambda owner, text, title, flags: calls.append((owner, text, flags)) or answer)
+    adapter.user = SimpleNamespace(MessageBoxW=lambda owner, text, title, flags: calls.append((owner, text, flags)) or answer,
+                                   GetForegroundWindow=lambda: 0, GetWindowThreadProcessId=lambda hwnd, pid: 0,
+                                   AttachThreadInput=lambda a, b, attach: True)
+    adapter.kernel = SimpleNamespace(GetCurrentThreadId=lambda: 1)
     assert adapter.approve_client("cursor", "standard") is (answer == 6)
     assert adapter.approve_current() is (answer == 6)
     for owner, text, flags in calls:

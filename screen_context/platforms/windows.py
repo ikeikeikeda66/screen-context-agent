@@ -10,8 +10,12 @@ from PIL import Image
 class Backend:
     def __init__(self):
         self.user = ctypes.windll.user32
+        self.kernel = ctypes.windll.kernel32
         self.user.GetForegroundWindow.restype = wintypes.HWND
         self.user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+        self.user.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+        self.user.AttachThreadInput.restype = wintypes.BOOL
+        self.kernel.GetCurrentThreadId.restype = wintypes.DWORD
         self.user.GetWindowTextLengthW.argtypes = [wintypes.HWND]
         self.user.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
         self.user.IsWindow.argtypes = [wintypes.HWND]
@@ -71,18 +75,34 @@ class Backend:
     # other windows and only flash in the taskbar while the caller waits.
     DIALOG = 0x4 | 0x100 | 0x10000 | 0x40000
 
+    def _dialog(self, text):
+        """MB_SETFOREGROUND alone does not work here (#50): the calling process is a windowless
+        capture worker, and Windows' foreground-lock blocks an unprivileged background process
+        from taking the foreground. Attaching our thread's input queue to the foreground window's
+        makes the calling thread indistinguishable from it for that check, which lets
+        MB_SETFOREGROUND succeed. https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-attachthreadinput"""
+        foreground = self.user.GetForegroundWindow()
+        this_thread = self.kernel.GetCurrentThreadId()
+        foreground_thread = self.user.GetWindowThreadProcessId(foreground, None) if foreground else 0
+        attached = bool(foreground_thread) and foreground_thread != this_thread and \
+            self.user.AttachThreadInput(this_thread, foreground_thread, True)
+        try:
+            return self.user.MessageBoxW(None, text, "Screen Context", self.DIALOG)
+        finally:
+            if attached: self.user.AttachThreadInput(this_thread, foreground_thread, False)
+
     def approve_current(self):
         from ..config import Settings
         from ..i18n import resolve, t
         lang = resolve(Settings.environment())
-        return self.user.MessageBoxW(None, t("approve.title", lang) + "\n\n" + t("approve.body", lang), "Screen Context", self.DIALOG) == 6
+        return self._dialog(t("approve.title", lang) + "\n\n" + t("approve.body", lang)) == 6
 
     def approve_client(self, name, profile):
         from ..config import Settings
         from ..i18n import resolve, t
         lang = resolve(Settings.environment())
         text = t("client.title", lang, name=name) + "\n\n" + t("client.body", lang, name=name, profile=profile)
-        return self.user.MessageBoxW(None, text, "Screen Context", self.DIALOG) == 6
+        return self._dialog(text) == 6
 
     def authenticate(self, reason_text):
         """Windows Hello, or the sign-in password when Hello is not set up (#33). Asked from this
