@@ -137,7 +137,7 @@ def ui_rows(settings, action): return [r for r in audit.rows(settings, client=ui
 def test_export_is_refused_unless_verified(settings, sessions, answer):
     add(settings, "exported text", ts=NOW - 100)
     ask, done, asked = attempt(settings, sessions, "export", export_fields(), answer)
-    assert "Touch ID" in ask.json()["message"] and asked == ["export"]
+    assert ("Touch ID" in ask.json()["message"] or "Windows Hello" in ask.json()["message"]) and asked == ["export"]
     assert done.status_code == 403 and not list((settings.root / "exports").iterdir())
     assert ui_rows(settings, "ui.export") == []
     assert ui_rows(settings, "ui.reauth")[0]["params"] == {"action": "export", "status": answer}
@@ -148,7 +148,7 @@ def test_export_runs_after_verification(settings, sessions):
     _, done, asked = attempt(settings, sessions, "export", export_fields(), reauth.VERIFIED)
     assert done.status_code == 200 and asked == ["export"] and done.json()["frames"] == 1
     [path] = (settings.root / "exports").iterdir()
-    assert "exported text" in path.read_text() and str(path) in done.json()["notice"]
+    assert "exported text" in path.read_text(encoding="utf-8") and str(path) in done.json()["notice"]
     assert ui_rows(settings, "ui.export")[0]["params"] == {"frames": 1, "format": "md"}
     assert any(r["action"] == "export" and r["client"] == "ui" for r in audit.rows(settings, client="ui"))
 
@@ -166,12 +166,13 @@ def test_backup_is_refused_unless_verified_and_never_shows_the_passphrase(settin
 
 @pytest.mark.parametrize("fields, error", [
     ({"path": "relative.zip", "passphrase": "x" * 12, "again": "x" * 12}, "full path"),
-    ({"path": "/nonexistent-folder-sc/b.zip", "passphrase": "x" * 12, "again": "x" * 12}, "does not exist"),
+    ({"path": "MISSING", "passphrase": "x" * 12, "again": "x" * 12}, "does not exist"),
     ({"path": "ABS", "passphrase": "short", "again": "short"}, "at least"),
     ({"path": "ABS", "passphrase": "x" * 12, "again": "y" * 12}, "differ"),
 ])
 def test_backup_checks_its_fields_before_asking(settings, sessions, tmp_path, fields, error):
-    fields = {**fields, "path": str(tmp_path / "b.zip") if fields["path"] == "ABS" else fields["path"]}
+    paths = {"ABS": tmp_path / "b.zip", "MISSING": tmp_path / "nonexistent-folder-sc" / "b.zip"}
+    fields = {**fields, "path": str(paths.get(fields["path"], fields["path"]))}
     async def steps(client):
         await opened(client, sessions)
         return await client.post("/api/backup", json=fields, headers=ORIGIN)

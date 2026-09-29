@@ -32,8 +32,13 @@ def test_current_screen_requests_are_denied_while_locked(settings):
     assert json.loads(request.with_suffix(".reply").read_text()) == {"status": "denied"}
 
 
-@pytest.mark.parametrize("desktop, switched, locked", [(0, 1, True), (7, 0, True), (7, 1, False)])
-def test_windows_lock_detection(desktop, switched, locked):
+@pytest.mark.parametrize("desktop, switched, lock_app, locked", [
+    (0, 1, False, True), (7, 0, False, True), (7, 1, False, False),
+    (7, 1, True, True),  # Windows 11 lock screen: LockApp.exe on the user's own desktop (#60)
+])
+def test_windows_lock_detection(monkeypatch, desktop, switched, lock_app, locked):
+    from screen_context import health
+    monkeypatch.setattr(health, "foreground_is_lock_screen", lambda user: lock_app)
     closed = []
     adapter = Backend.__new__(Backend)
     adapter.user = SimpleNamespace(OpenInputDesktop=lambda flags, inherit, access: desktop,
