@@ -85,7 +85,7 @@ Use this list when you test a build on real hardware:
 9. **Open Today…** shows the Windows Hello prompt in front of other windows. The browser opens only after it is confirmed; Cancel opens nothing.
 10. On an account without Windows Hello, the sign-in password prompt appears instead. A wrong password, or another account's password, opens nothing.
 11. In the UI, export, backup and approving a client show the same prompt, asked by the capture worker, so capture must be started. With capture stopped, the UI refuses them and says to start capture.
-12. Locking the screen (Win+L) ends the UI session: the page asks for a new link after unlocking.
+12. Locking the screen (Win+L) ends the UI session: the page asks for a new link after unlocking. Locked is detected by the input desktop and by a `LockApp.exe` / `LogonUI.exe` foreground window: on Windows 11 the lock screen runs on the user's own desktop, so the input-desktop check alone missed it (#60, #63).
 13. The Today view, search, the "Where you left off" card and the control tabs (Data, Access log, Clients) work, and the UI's own pages are not recorded.
 14. **Delete Recent** → Last 5 min deletes only frames from that window, including ones still in the spool; No deletes nothing.
 15. The frozen build starts `screen-context.exe ui` without a console window, and the UI process exits when its session ends.
