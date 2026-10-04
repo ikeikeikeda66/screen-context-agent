@@ -138,7 +138,7 @@ def test_cipher_tamper():
 def test_tools_and_no_capture_import(settings):
     from screen_context.mcp_server import create_server
     # Legacy profile names stay accepted for existing client configurations.
-    for profile, count in (("standard",4),("full",12),("claude_code",4),("openclaw",12)):
+    for profile, count in (("standard",5),("full",13),("claude_code",5),("openclaw",13)):
         server = create_server(settings, profile)
         tools = asyncio.run(server.list_tools())
         assert len(tools) == count

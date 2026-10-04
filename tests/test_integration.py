@@ -45,7 +45,7 @@ def test_stdio_real_process(tmp_path):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 listing = await session.list_tools()
-                assert len(listing.tools) == 4
+                assert len(listing.tools) == 5
                 assert "get_day_material" in {tool.name for tool in listing.tools}
                 result = await session.call_tool("search_screen_history", {"query":"配信"})
                 assert not result.is_error

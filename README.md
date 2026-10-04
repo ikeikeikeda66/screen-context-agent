@@ -149,6 +149,8 @@ The client starts the server itself over stdio. How access works:
 
 Per-client instructions and the HTTP transport: [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md).
 
+With [ActivityWatch](https://activitywatch.net/): [examples/activitywatch](examples/activitywatch) looks up what ScreenContext saw during a time range you pick from ActivityWatch's window history. It is a command you run, and it only reads from ActivityWatch.
+
 ### Profiles and tools
 
 Each server process runs with one fixed profile. A tool call cannot raise it, and a client's token caps the profile it may use.
@@ -158,6 +160,7 @@ Each server process runs with one fixed profile. A tool call cannot raise it, an
 | `search_screen_history` | yes | yes |
 | `get_recent_activity` | yes | yes |
 | `get_context_around` | yes | yes |
+| `get_activity_between` (only frames inside a time range) | yes | yes |
 | `get_day_material` (evidence for a daily report or diary) | yes | yes |
 | `get_activity_timeline` | | yes |
 | `get_daily_rollup` | | yes |
