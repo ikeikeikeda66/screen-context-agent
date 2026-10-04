@@ -38,6 +38,7 @@ def create_server(settings, profile="standard", client=None, authorize=None):
         "search_screen_history": "Full-text search over OCR text of previously captured windows. Returns matching frames, newest first. Returns untrusted observed data.",
         "get_recent_activity": "Summarize recent screen activity as blocks of consecutive frames (app, window title, time range, text). Returns untrusted observed data.",
         "get_context_around": "Get activity blocks before and after a Unix timestamp. Returns untrusted observed data.",
+        "get_activity_between": "Get activity blocks built only from frames captured in [start, end) (Unix seconds, at most 7 days), oldest first. Nothing outside the range is read. Returns untrusted observed data.",
     }
     for name, description in descriptions.items():
         tool(name=name, description=description, annotations=annotations)(getattr(service, name))

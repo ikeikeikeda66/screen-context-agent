@@ -149,6 +149,8 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 
 クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
+[ActivityWatch](https://activitywatch.net/) と組み合わせる例は [examples/activitywatch](examples/activitywatch)（英語）にあります。ActivityWatch のウィンドウ履歴から選んだ時間帯について、ScreenContext が記録した画面を参照します。自分で実行するコマンドで、ActivityWatch のデータは読むだけです。
+
 ### プロファイルとツール
 
 サーバープロセスごとにプロファイルが 1 つに固定されます。ツールの引数で変更することはできません。また、クライアントのトークンごとに使えるプロファイルの上限が決まっています。
@@ -158,6 +160,7 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 | `search_screen_history` | ○ | ○ |
 | `get_recent_activity` | ○ | ○ |
 | `get_context_around` | ○ | ○ |
+| `get_activity_between`（指定した時間帯の画面だけ） | ○ | ○ |
 | `get_day_material`（日報・日記の根拠） | ○ | ○ |
 | `get_activity_timeline` | | ○ |
 | `get_daily_rollup` | | ○ |

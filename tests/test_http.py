@@ -26,7 +26,7 @@ def test_streamable_http_real_asgi(tmp_path):
                 response = await client.post("/mcp", json={"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}})
                 assert response.status_code == 200, response.text
                 names = {tool["name"] for tool in response.json()["result"]["tools"]}
-                assert len(names) == 12
+                assert len(names) == 13
                 assert "get_diary_material" in names
                 call = {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_screen_history","arguments":{"query":"anything"}}}
                 response = await client.post("/mcp", json=call)

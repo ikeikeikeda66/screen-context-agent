@@ -19,7 +19,7 @@ def bounded(value, low, high, name):
     return value
 
 
-# "standard" serves coding assistants: 4 read-only tools, IDE and terminal frames excluded.
+# "standard" serves coding assistants: 5 read-only tools, IDE and terminal frames excluded.
 # "full" serves personal agents: timelines, diary material, health, deltas, proposals and images.
 PROFILES = ("standard", "full")
 # Names used by earlier releases; accepted so existing client configurations keep working.
@@ -108,6 +108,18 @@ class Service:
         before = [r for r in recs if r["start_ts"] <= ts][-n:]
         after = [r for r in recs if r["start_ts"] > ts][:n]
         return self.finish(before + after, "get_context_around", {"ts": ts, "n": n})
+
+    def get_activity_between(self, start: float, end: float, limit: int = 20):
+        """Activity blocks built only from frames with start <= ts < end (Unix seconds), oldest first.
+        Nothing outside the range is read, so a caller that holds a time range (for example one from
+        ActivityWatch, #66) gets no screen text from outside it."""
+        bounded(start, 0, 32503680000, "ts"); bounded(end, 0, 32503680000, "ts"); bounded(limit, 1, 50, "limit")
+        if not start < end: raise ValueError("start must be before end")
+        if end - start > 7 * 86400: raise ValueError("the range must be 7 days or shorter")
+        recs = blocks(self.rows(start, end))
+        page = recs[:limit]
+        return {**self.finish(page, "get_activity_between", {"start": start, "end": end, "limit": limit}),
+                "more": len(recs) > len(page)}
 
     def require_full(self):
         if self.profile != "full": raise PermissionError("Tool unavailable for this profile")
