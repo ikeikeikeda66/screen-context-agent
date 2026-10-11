@@ -142,8 +142,14 @@ def test_tools_and_no_capture_import(settings):
         server = create_server(settings, profile)
         tools = asyncio.run(server.list_tools())
         assert len(tools) == count
-        # submit_proposal writes the outbox; every other tool stays read-only.
-        assert all(t.annotations.read_only_hint or t.name == "submit_proposal" for t in tools)
+        # All four hints are explicit booleans on every tool (#73). submit_proposal writes the
+        # outbox and get_current_screen captures a new frame; every other tool stays read-only.
+        for t in tools:
+            hints = (t.annotations.read_only_hint, t.annotations.destructive_hint, t.annotations.idempotent_hint, t.annotations.open_world_hint)
+            assert all(isinstance(h, bool) for h in hints), t.name
+            assert t.annotations.read_only_hint == (t.name not in ("submit_proposal", "get_current_screen")), t.name
+            assert t.annotations.destructive_hint is False and t.annotations.open_world_hint is False, t.name
+            assert t.annotations.idempotent_hint == (t.name != "get_current_screen"), t.name
 
 
 def test_http_auth(settings):
