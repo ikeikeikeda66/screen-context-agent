@@ -171,7 +171,7 @@ Each server process runs with one fixed profile. A tool call cannot raise it, an
 | `get_activity_delta` (signed cursor, fixed snapshot) | | yes |
 | `submit_proposal` (writes to the proposal outbox) | | yes |
 | `get_snapshot_image` | | yes |
-| `get_current_screen` (asks for local approval on every call) | | yes |
+| `get_current_screen` (asks for local approval on every call; the only read tool that stores a new frame) | | yes |
 
 - `standard` is for coding assistants. It hides frames from IDEs and terminals (`ide_apps` in the policy), because the assistant already has the source.
 - `full` is for a personal agent that you trust with screenshots and timelines.
@@ -372,7 +372,7 @@ screen-context push DATE                send one day to a local OpenViking serve
 
 ### Optional: OpenViking
 
-`push DATE` exports one day's rollup and sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. Exported data is not removed when you later add exclusions.
+`push DATE` exports one day's rollup and sends it to a local [OpenViking](https://github.com/volcengine/OpenViking) server at `http://127.0.0.1:1933` (`VIKING_API_KEY` if needed). Nothing is pushed automatically. `VIKING_API_KEY` is read only by this command, never by the MCP server, and is sent only to that loopback address: proxies from the environment are not used and redirects are not followed. Exported data is not removed when you later add exclusions.
 
 ## Windows setup
 

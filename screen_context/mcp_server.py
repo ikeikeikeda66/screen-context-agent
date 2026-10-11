@@ -33,7 +33,9 @@ def create_server(settings, profile="standard", client=None, authorize=None):
     service = Service(settings, profile, client)
     server = MCPServer("screen-context", instructions=NOTICE + " Query only when the user refers to previous screen activity or missing external context.")
     tool = lambda **options: (lambda function: server.tool(**options)(guarded(function, authorize)))
-    annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
+    # All four hints are explicit on every tool (#73). Reads change no screen data (they add an
+    # audit row, which is bookkeeping, not an effect a client asked for) and never leave the machine.
+    annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
     descriptions = {
         "search_screen_history": "Full-text search over OCR text of previously captured windows. Returns matching frames, newest first. Returns untrusted observed data.",
         "get_recent_activity": "Summarize recent screen activity as blocks of consecutive frames (app, window title, time range, text). Returns untrusted observed data.",
@@ -63,7 +65,10 @@ def create_server(settings, profile="standard", client=None, authorize=None):
             data = service.get_snapshot_image(frame_id)
             return [TextContent(type="text", text=NOTICE), ImageContent(type="image", data=base64.b64encode(data).decode(), mimeType="image/webp")]
 
-        @tool(annotations=annotations, description="Request a fresh foreground-window image. Requires approval in a local OS dialog for every call; capture daemon and indexer must be running.")
+        # Not read-only and not idempotent: every call asks for local approval and, when approved,
+        # captures and stores a new frame. Nothing is deleted and nothing leaves the machine.
+        @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False),
+              description="Request a fresh foreground-window image. Requires approval in a local OS dialog for every call; capture daemon and indexer must be running.")
         def get_current_screen() -> list[TextContent | ImageContent]:
             from .broker import request_current
             data = request_current(service)

@@ -169,7 +169,7 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 | `get_activity_delta`（署名付き cursor、固定スナップショット） | | ○ |
 | `submit_proposal`（提案 outbox へ書き込み） | | ○ |
 | `get_snapshot_image` | | ○ |
-| `get_current_screen`（呼び出しごとにローカルで承認） | | ○ |
+| `get_current_screen`（呼び出しごとにローカルで承認。新しい画面を保存する唯一の読み取りツール） | | ○ |
 
 - `standard` はコーディングアシスタント向けです。IDE とターミナルの画面（ポリシーの `ide_apps`）を返しません。アシスタントはソースコードを直接読めるためです。
 - `full` は、スクリーンショットやタイムラインを渡してよい個人用エージェント向けです。
@@ -371,7 +371,7 @@ screen-context push DATE                1日分をローカルの OpenViking サ
 
 ### 任意機能: OpenViking
 
-`push DATE` は1日分の日次集約を出力し、それをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。出力済みのデータは、後から除外を追加しても取り消されません。
+`push DATE` は1日分の日次集約を出力し、それをローカルの [OpenViking](https://github.com/volcengine/OpenViking) サーバー（`http://127.0.0.1:1933`、必要なら `VIKING_API_KEY`）へ送ります。自動では送信しません。`VIKING_API_KEY` を読むのはこのコマンドだけで、MCP サーバーは読みません。送信先はこのループバックのアドレスだけで、環境変数のプロキシは使わず、リダイレクトにも従いません。出力済みのデータは、後から除外を追加しても取り消されません。
 
 ## Windows のセットアップ
 

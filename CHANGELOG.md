@@ -2,6 +2,8 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- MCP: every tool declares all four annotation hints. `get_current_screen` is now marked as not read-only and not idempotent, because each approved call stores a new frame (#73).
+- `push`: `VIKING_API_KEY` is sent only to the loopback OpenViking endpoint. Environment proxies are not used, redirects are not followed, and no empty key header is sent (#73).
 - MCP: `get_activity_between(start, end)` returns activity blocks built only from frames inside the range (at most 7 days), in both profiles. [examples/activitywatch](examples/activitywatch) uses it to look up what ScreenContext saw during a time range from ActivityWatch; it only reads from ActivityWatch (#66).
 - macOS: the menu bar app runs the indexer itself (`screen-context index --watch` as a child process, restarted after a crash) and shows its state in the menu. **Start at Login** uses the app's own login item. On first start the app offers to remove the old `local.screencontext.indexer` LaunchAgent (#34).
 - `screen-context ui`: a local web UI with a one-time link, Host/Origin checks, confirmed writes, and a session that ends after 5 idle minutes or on screen lock (#26).
