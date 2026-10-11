@@ -10,6 +10,8 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
 </p>
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/ikeikeikeda66-screen-context-agent-1ai957)](https://m8ven.ai/mcp/ikeikeikeda66-screen-context-agent-1ai957?s=readme)
+
 <p align="center"><a href="README.ja.md">日本語</a> · <a href="https://github.com/ikeikeikeda66/screen-context-agent/releases">Releases</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="https://x.com/ikeikeikeda6">X</a></p>
 
 ScreenContext records the foreground window, reads its text with the operating system's built-in OCR, keeps an encrypted local history, and lets AI assistants search that history through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). Setup presets are provided for Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex CLI and Gemini CLI; other MCP clients can use the generic configuration.
