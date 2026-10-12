@@ -7,7 +7,7 @@ from .crypto import atomic_write, get_key, seal, unseal
 from .privacy import denied, domains
 from .i18n import resolve, t
 from .pii import redact
-from .sensitive import detect
+from .sensitive import detect, enabled
 
 
 def merge_lines(lines):
@@ -58,7 +58,7 @@ def drain(settings, recognize=native_ocr):
             if denied(policy, record):
                 path.unlink(); stats["excluded"] += 1; continue
             day = time.strftime("%Y-%m-%d", time.localtime(record["ts"]))
-            category = detect(record["ocr_text"] + "\n" + record.get("window_title", ""), policy["sensitive_detectors"])
+            category = detect(record["ocr_text"] + "\n" + record.get("window_title", ""), enabled(policy))
             if category:
                 # Dropped whole, before any image is written; only the reason is counted.
                 with store.connect(settings) as con: store.count_skip(con, day, category)

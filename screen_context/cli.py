@@ -157,13 +157,13 @@ def main():
         from pathlib import Path
         from .config import DEFAULT_POLICY
         from .pii import scan
-        from .sensitive import detect
+        from .sensitive import detect, enabled
         try: policy = settings.policy()
         except FileNotFoundError: policy = DEFAULT_POLICY  # works before init, with the defaults
         text = Path(args.file).read_text(encoding="utf-8")
         lines = text.splitlines()
         indexes, combinations = scan(lines, policy["pii_combinations"])
-        result = {"drop_frame": detect(text, policy["sensitive_detectors"]), "combinations": combinations,
+        result = {"drop_frame": detect(text, enabled(policy)), "combinations": combinations,
                   "redacted_lines": [{"line": i + 1, "text": lines[i]} for i in sorted(indexes)]}
     elif args.command == "audit":
         from datetime import datetime

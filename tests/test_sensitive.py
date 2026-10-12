@@ -1,4 +1,5 @@
 """Synthetic data only: published test card numbers and made-up individual numbers."""
+import json
 import re
 import pytest
 from PIL import Image
@@ -6,7 +7,7 @@ from test_core import settings, add, change
 from screen_context import store
 from screen_context.capture import spool
 from screen_context.indexer import drain
-from screen_context.sensitive import card_number, detect, my_number, my_number_check_digit
+from screen_context.sensitive import account_list, card_number, detect, enabled, my_number, my_number_check_digit
 from screen_context.service import Service
 
 
@@ -83,3 +84,48 @@ def test_default_rules_exclude_contacts_and_checkout_pages_everywhere(settings):
     assert frame(settings, "Payment API reference https://docs.example.com/api/payments", title="Docs")["indexed"] == 1
     add(settings, "連絡先の内容", app="com.apple.AddressBook")
     assert Service(settings, "full").search_screen_history("連絡先")["count"] == 0
+
+
+# --- account lists (#65): made-up accounts only ------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    "氏名 ユーザーID パスワード\n山田 太郎 yamada01 Abc12345\n佐藤 花子 sato02 Xyz67890",          # one row per line
+    "Name | Username | Password\nTaro Example | taro.example1 | ********\nHana Example | hana2 | ********",
+    "No. アカウント 暗証番号 備考\n1 user001 ●●●●●● 管理者\n2 user002 ●●●●●● 一般",
+    "氏名\nログインID\nパスワード\n山田 太郎\nyamada01\nAbc12345\n佐藤 花子\nsato02\nXyz67890",       # one cell per line
+    "名前 メールアドレス\n山田 taro@example.com\n佐藤 hana@example.com",
+])
+def test_account_lists_are_found(text):
+    assert account_list(text)
+
+
+@pytest.mark.parametrize("text", [
+    "ログインID\nパスワード\nログイン\nパスワードを忘れた方",                                         # empty login form
+    "ログインID\nuser01\nパスワード\n••••••••\nログイン",                                            # filled login form
+    "氏名 ユーザーID パスワード\n山田 太郎 yamada01 Abc12345",                                        # one row only
+    "パスワードを忘れた場合は、ユーザーIDを入力してください。\nuser01\nuser02",                     # a sentence, not a header
+    "def login(username, password):\n    user1 = find(username)\n    key2 = hash(password)",     # code
+    "パスワード\n\n" + "\n" * 40 + "ユーザーID\nuser01\nuser02",                                    # labels far apart
+    "Name Size Modified\nreport1.pdf 2 MB\nslides2.key 5 MB",                                     # one column label
+])
+def test_other_screens_are_not_account_lists(text):
+    assert not account_list(text)
+
+
+def test_account_lists_are_dropped_by_default_and_can_be_turned_off(settings):
+    table = "氏名 ユーザーID パスワード\n山田 太郎 yamada01 Abc12345\n佐藤 花子 sato02 Xyz67890"
+    assert frame(settings, table, title="Accounts")["excluded"] == 1
+    assert stored(settings) == (0, {"account_list": 1})
+    change(settings, sensitive_tables=[])
+    assert frame(settings, table, title="Accounts")["indexed"] == 1
+
+
+def test_policy_files_written_before_the_rule_still_get_it(settings):
+    """policy.json lists every key it was written with; `sensitive_tables` is new, so the default applies."""
+    path = settings.root / "policy.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["sensitive_tables"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert enabled(settings.policy()) == ["card_number", "my_number", "account_list"]
+    change(settings, sensitive_tables=["passport"])
+    with pytest.raises(ValueError, match="sensitive_tables"): settings.policy()

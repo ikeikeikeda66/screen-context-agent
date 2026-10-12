@@ -12,6 +12,7 @@ from urllib.parse import quote
 from . import material, sessions, store
 from .i18n import auth, t
 from .privacy import SELF_TITLE
+from .sensitive import DETECTORS
 from .service import Service
 
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -224,7 +225,7 @@ def skipped(x, counts):
     if not counts: return f'<p>{x("ui.skipped.none")}</p>'
     items = []
     for category, n in counts.items():
-        if category in ("card_number", "my_number"): items.append(x("ui.skipped.dropped", n=n, what=t("ui.skip." + category, x.lang)))
+        if category in DETECTORS: items.append(x("ui.skipped.dropped", n=n, what=t("ui.skip." + category, x.lang)))
         else: items.append(x("ui.skipped.redacted", n=n, what=t("ui.skip.combination", x.lang, rule=category)))
     return "<ul>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
 

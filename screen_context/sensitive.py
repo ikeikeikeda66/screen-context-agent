@@ -3,6 +3,10 @@
 A frame whose OCR text contains a card number or a My Number is dropped whole, text and
 image, before anything is written. Both detectors check a checksum, so order numbers,
 phone numbers and dates rarely match. Only the category is counted, never the content.
+
+`account_list` (#65) drops a frame that shows a table of accounts: a header row with at least two
+of name, ID and password columns, followed by at least two rows with IDs, e-mail addresses or
+masked values. A login form has the labels but not the rows, so it is kept.
 """
 import re
 
@@ -48,7 +52,51 @@ def my_number(text):
     return False
 
 
-DETECTORS = {"card_number": card_number, "my_number": my_number}
+# Column labels. ASCII words must stand alone, so "username" in "get_username(" or "id" in
+# "valid" do not count; Japanese labels are matched as written.
+ASCII = r"(?<![A-Za-z0-9_]){}(?![A-Za-z0-9_])"
+COLUMNS = {
+    "name": re.compile(r"氏名|お名前|名前|表示名|フルネーム|" + ASCII.format(r"(?i:(?:full\s*|display\s*)?name)")),
+    "id": re.compile(r"(?:ユーザー|ログイン|アカウント|社員|会員)\s*(?:ID|ＩＤ|名)|アカウント|メールアドレス|"
+                     + ASCII.format(r"(?:ＩＤ|(?i:id|user\s*(?:id|name)|login(?:\s*id)?|account(?:\s*id)?|e-?mail))")),
+    "password": re.compile(r"パスワード|暗証番号|" + ASCII.format(r"(?i:pass\s*word|passwd|passcode|pwd?)")),
+}
+# A header is short, not a sentence and not code.
+NOT_HEADER = re.compile(r"[。、？！?!=(){}<>;\"'`]")
+ROW_VALUE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|[•●＊*]{4,}|"
+                       r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9._-]*\d[A-Za-z0-9._-]*(?![A-Za-z0-9_@])")
+HEADER_LINES, ROWS, ROW_WINDOW = 3, 2, 30
+
+
+def columns(line):
+    if len(line) > 80 or NOT_HEADER.search(line): return set()
+    return {name for name, pattern in COLUMNS.items() if pattern.search(line)}
+
+
+def account_list(text):
+    """A header with two of name/ID/password (on one line, or one label per line as OCR reads
+    table cells), then at least two lines with an ID, e-mail address or masked password."""
+    lines = text.splitlines()
+    for i in range(len(lines)):
+        found, end = set(), i
+        for j in range(i, min(i + HEADER_LINES, len(lines))):
+            labels = columns(lines[j])
+            if not labels: break
+            found |= labels
+            end = j
+        if len(found) < 2: continue
+        rows = sum(1 for line in lines[end + 1:end + 1 + ROW_WINDOW] if ROW_VALUE.search(line))
+        if rows >= ROWS: return True
+    return False
+
+
+DETECTORS = {"card_number": card_number, "my_number": my_number, "account_list": account_list}
+
+
+def enabled(policy):
+    """The detectors a policy turns on. `account_list` has its own key so that it reaches
+    policy.json files written before it existed."""
+    return policy["sensitive_detectors"] + policy["sensitive_tables"]
 
 
 def detect(text, enabled):

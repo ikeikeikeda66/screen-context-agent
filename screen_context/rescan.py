@@ -12,7 +12,7 @@ from . import audit, purge, store
 from .i18n import resolve, t
 from .pii import redact
 from .privacy import domains
-from .sensitive import detect
+from .sensitive import detect, enabled
 
 
 def ocr_lines(row):
@@ -27,7 +27,7 @@ def scan(settings):
     drops, redactions = {}, {}
     with store.connect(settings, readonly=True) as con:
         for row in con.execute("SELECT id, window_title, ocr_text, ocr_json FROM frames"):
-            category = detect(row["ocr_text"] + "\n" + row["window_title"], policy["sensitive_detectors"])
+            category = detect(row["ocr_text"] + "\n" + row["window_title"], enabled(policy))
             if category:
                 drops[row["id"]] = category
                 continue
