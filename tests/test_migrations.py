@@ -41,3 +41,103 @@ def test_health_reports_an_outdated_database_instead_of_failing(tmp_path):
     store.initialize(s)
     from screen_context.health import health
     assert health(s)["state"] != "needs_init" and health(s)["database_schema"] == store.SCHEMA_VERSION
+
+
+# Schema version mismatch (#70): a newer or outdated database is refused, never written.
+import hashlib
+import json
+import time
+import zipfile
+from screen_context import lifecycle
+from screen_context.health import derive_state, health as read_health
+
+PASSPHRASE = "correct horse battery staple"
+
+
+def make_db(tmp_path, version):
+    s = Settings(tmp_path, plaintext=True); s.prepare()
+    con = sqlite3.connect(s.db)
+    con.execute("PRAGMA journal_mode=WAL")
+    for v in sorted(store.MIGRATIONS):
+        if v <= min(version, store.SCHEMA_VERSION): con.executescript(store.MIGRATIONS[v])
+    con.execute(f"PRAGMA user_version={version}")
+    con.commit(); con.close()
+    return s
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def user_version(path):
+    con = sqlite3.connect(path)
+    try: return con.execute("PRAGMA user_version").fetchone()[0]
+    finally: con.close()
+
+
+def write_archive(path, db_file, schema):
+    manifest = {"format": lifecycle.FORMAT, "created": time.time(), "schema": schema, "encrypted": False}
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        archive.write(db_file, "history.db")
+    return path
+
+
+def test_initialize_leaves_a_newer_database_untouched(tmp_path):
+    s = make_db(tmp_path, 9)
+    before = sha256(s.db)
+    legacy = s.root / "audit.jsonl"; legacy.write_text('{"ts": 1}\n', encoding="utf-8")
+    with pytest.raises(store.SchemaMismatch) as excinfo: store.initialize(s)
+    assert excinfo.value.newer is True and excinfo.value.found == 9
+    assert sha256(s.db) == before and user_version(s.db) == 9
+    assert legacy.exists()
+
+
+def test_connect_refuses_an_outdated_database_without_migrating(tmp_path):
+    s = make_db(tmp_path, 3)
+    with pytest.raises(store.SchemaMismatch) as excinfo:
+        with store.connect(s): pass
+    assert excinfo.value.newer is False and excinfo.value.found == 3 and excinfo.value.expected == store.SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("version", [3, 9])
+def test_backup_records_the_real_schema_and_leaves_the_database_alone(tmp_path, version):
+    s = make_db(tmp_path, version)
+    before = sha256(s.db)
+    archive = tmp_path / "b.zip"
+    result = lifecycle.backup(s, archive, PASSPHRASE)
+    assert result["schema"] == version
+    assert result["audited"] is False
+    with zipfile.ZipFile(archive) as z: assert json.loads(z.read("manifest.json"))["schema"] == version
+    assert sha256(s.db) == before
+
+
+def test_restore_refuses_a_newer_archive_before_replacing(tmp_path):
+    archive = write_archive(tmp_path / "new.zip", make_db(tmp_path / "src", 9).db, 9)
+    target = make_db(tmp_path / "data", store.SCHEMA_VERSION)
+    before = sha256(target.db)
+    with pytest.raises(store.SchemaMismatch) as excinfo: lifecycle.restore(target, archive, PASSPHRASE, replace=True)
+    assert excinfo.value.newer is True
+    assert sha256(target.db) == before
+
+
+def test_restore_migrates_an_outdated_archive(tmp_path):
+    archive = write_archive(tmp_path / "old.zip", make_db(tmp_path / "src", 3).db, 3)
+    target = Settings(tmp_path / "new", plaintext=True)
+    result = lifecycle.restore(target, archive, PASSPHRASE)
+    assert result["schema"] == [3, store.SCHEMA_VERSION]
+    assert user_version(target.db) == store.SCHEMA_VERSION
+
+
+def test_health_reports_a_newer_database_as_needs_newer_binary(tmp_path):
+    s = make_db(tmp_path, 9)
+    assert read_health(s)["state"] == "needs_newer_binary"
+
+
+def test_derive_state_follows_the_database_schema():
+    base = {"paused": False, "capture": {"running": True, "error_type": None}, "permission": "unknown",
+            "session": {"locked": False, "idle_seconds": None}, "indexer": {"running": True},
+            "queue": {"oldest_age_seconds": None}, "schema_version": store.SCHEMA_VERSION}
+    assert derive_state({**base, "database_schema": store.SCHEMA_VERSION}) == "active"
+    assert derive_state({**base, "database_schema": 3}) == "needs_init"
+    assert derive_state({**base, "database_schema": 9}) == "needs_newer_binary"

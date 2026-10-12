@@ -119,3 +119,104 @@ def test_full_tool_schema_does_not_change_with_authorize(settings):
     dump = lambda server: json.dumps([t.model_dump(mode="json", exclude_none=True) for t in asyncio.run(server.list_tools())], sort_keys=True)
     assert dump(plain) == dump(guarded)
     assert len(asyncio.run(plain.list_tools())) == 13
+
+
+# Schema mismatch (#70): a database at another schema version must reach the client as a hint, never as a traceback.
+MISMATCH_HINT = {3: "screen-context init", 9: "Update ScreenContext"}
+
+
+def set_version(settings, version):
+    import sqlite3
+    con = sqlite3.connect(settings.db)
+    try:
+        con.execute(f"PRAGMA user_version={version}")
+        con.commit()
+    finally:
+        con.close()
+
+
+@pytest.mark.parametrize("version", [3, 9])
+def test_schema_mismatch_returns_the_hint_and_leaves_no_client_context(settings, caplog, version):
+    from screen_context.service import CURRENT_CLIENT
+    caplog.set_level(logging.DEBUG)
+    token = access.issue(settings, "cursor")
+    access.decide(settings, "cursor", True, "cli")
+    server = create_server(settings, "standard", authorize=lambda: access.authorize(settings, token, "standard"))
+    set_version(settings, version)
+    with pytest.raises(ToolError, match=MISMATCH_HINT[version]) as info:
+        asyncio.run(server.call_tool("search_screen_history", {"query": "x"}))
+    assert type(info.value) is ToolError
+    assert CURRENT_CLIENT.get() is None
+    assert not [r for r in caplog.records if r.exc_info or "unexpected exception" in r.getMessage().lower()]
+
+
+def test_schema_mismatch_in_the_tool_body_returns_the_hint(settings, caplog):
+    caplog.set_level(logging.DEBUG)
+    set_version(settings, 9)
+    server = create_server(settings, "standard", authorize=lambda: "c")
+    with pytest.raises(ToolError, match="Update ScreenContext") as info:
+        asyncio.run(server.call_tool("search_screen_history", {"query": "x"}))
+    assert type(info.value) is ToolError
+    assert not [r for r in caplog.records if r.exc_info or "unexpected exception" in r.getMessage().lower()]
+
+
+def test_in_memory_client_gets_the_schema_hint_and_no_traceback_log(settings, caplog):
+    caplog.set_level(logging.DEBUG)
+    token = access.issue(settings, "cursor")
+    access.decide(settings, "cursor", True, "cli")
+    set_version(settings, 9)
+
+    async def run():
+        server = create_server(settings, "standard", authorize=lambda: access.authorize(settings, token, "standard"))
+        async with Client(server) as client:
+            return await client.call_tool("search_screen_history", {"query": "x"})
+
+    result = asyncio.run(run())
+    assert result.is_error
+    assert "Update ScreenContext" in result.content[0].text
+    assert not [r for r in caplog.records if "unexpected exception" in r.getMessage().lower() or r.exc_info]
+
+
+@pytest.mark.parametrize("version", [3, 9])
+def test_stdio_schema_mismatch_answers_each_call_with_the_hint(settings, version):
+    token = access.issue(settings, "cursor")
+    access.decide(settings, "cursor", True, "cli")
+    set_version(settings, version)
+    env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1",
+           "SCREEN_CONTEXT_CLIENT_TOKEN": token, "SCREEN_CONTEXT_LANG": "en"}
+    proc = subprocess.Popen([sys.executable, "-m", "screen_context.cli", "serve"], env=env,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            encoding="utf-8")
+    # The watchdog kills the server if a read below would otherwise wait forever.
+    watchdog = threading.Timer(30, proc.kill)
+    watchdog.start()
+    lines = []
+    try:
+        def send(line):
+            proc.stdin.write(line + "\n")
+            proc.stdin.flush()
+            lines.append(proc.stdout.readline())
+            return json.loads(lines[-1])
+
+        send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                         "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}}))
+        proc.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        proc.stdin.flush()
+        tools = send(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}))
+        assert len(tools["result"]["tools"]) > 0
+        call = send(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                                "params": {"name": "search_screen_history", "arguments": {"query": "x"}}}))
+        proc.stdin.close()
+        err = proc.stderr.read()
+        lines += proc.stdout.read().splitlines()
+        proc.wait(timeout=30)
+    finally:
+        watchdog.cancel()
+        if proc.poll() is None: proc.kill()
+    assert proc.returncode == 0, err
+    assert call["result"]["isError"] is True
+    assert MISMATCH_HINT[version] in call["result"]["content"][0]["text"]
+    for line in lines:
+        json.loads(line)
+    assert "Traceback" not in err
+    assert MISMATCH_HINT[version] in err

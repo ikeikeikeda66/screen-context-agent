@@ -6,16 +6,17 @@ import sys
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
-from . import access
+from . import access, i18n, store
 from .privacy import NOTICE
 from .service import CURRENT_CLIENT, InvalidArgument, Service
 
 
-def guarded(function, authorize):
+def guarded(function, authorize, settings=None):
     """Run a tool only for an authorized client, and name that client in the audit log.
     Checking on every call makes a revoked token stop working without restarting the server.
     Without `authorize` (tests only) the call is accepted as is. Either way a caller mistake
-    (InvalidArgument) reaches the client as its own text; anything else stays a crash for the SDK to log (#69)."""
+    (InvalidArgument) reaches the client as its own text; anything else stays a crash for the SDK to log (#69).
+    A database written by another version also reaches the client as guidance (#70)."""
     @functools.wraps(function)
     def call(*args, **kwargs):
         reset = None
@@ -23,9 +24,11 @@ def guarded(function, authorize):
             # ToolError reaches the client verbatim, so a revoked client learns how to reconnect.
             try: client = authorize()
             except PermissionError as error: raise ToolError(str(error)) from error
+            except store.SchemaMismatch as error: raise ToolError(i18n.schema_message(error, i18n.resolve(settings))) from error
             reset = CURRENT_CLIENT.set(client)
         try: return function(*args, **kwargs)
         except InvalidArgument as error: raise ToolError(str(error)) from error
+        except store.SchemaMismatch as error: raise ToolError(i18n.schema_message(error, i18n.resolve(settings))) from error
         finally:
             if reset is not None: CURRENT_CLIENT.reset(reset)
     return call
@@ -36,7 +39,7 @@ def create_server(settings, profile="standard", client=None, authorize=None):
     every call is accepted and audited under `client`."""
     service = Service(settings, profile, client)
     server = MCPServer("screen-context", instructions=NOTICE + " Query only when the user refers to previous screen activity or missing external context.")
-    tool = lambda **options: (lambda function: server.tool(**options)(guarded(function, authorize)))
+    tool = lambda **options: (lambda function: server.tool(**options)(guarded(function, authorize, settings)))
     # All four hints are explicit on every tool (#73). Reads change no screen data (they add an
     # audit row, which is bookkeeping, not an effect a client asked for) and never leave the machine.
     annotations = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
@@ -98,6 +101,12 @@ class BearerGate:
                 await send({"type": "http.response.start", "status": 401, "headers": [(b"www-authenticate", b"Bearer")]})
                 await send({"type": "http.response.body", "body": b"Unauthorized"})
                 return
+            except store.SchemaMismatch as error:
+                # A database from another version: say what to do, and do not reach the app (#70).
+                body = i18n.schema_message(error, i18n.resolve(self.settings)).encode()
+                await send({"type": "http.response.start", "status": 503, "headers": [(b"content-type", b"text/plain; charset=utf-8")]})
+                await send({"type": "http.response.body", "body": body})
+                return
             reset = CURRENT_CLIENT.set(client)
             try: await self.app(scope, receive, send)
             finally: CURRENT_CLIENT.reset(reset)
@@ -118,6 +127,9 @@ def run(settings, profile, transport, port=8765):
         token = os.environ.get(access.TOKEN_ENV)
         try: access.authenticate(settings, token, profile)
         except PermissionError as error: sys.exit(str(error))
+        except store.SchemaMismatch as error:
+            # Keep serving: each tool call re-checks and answers with this guidance, and returns no data (#70).
+            print(i18n.schema_message(error, i18n.resolve(settings)), file=sys.stderr)
         create_server(settings, profile, authorize=lambda: access.authorize(settings, token, profile)).run()
     else:
         import uvicorn

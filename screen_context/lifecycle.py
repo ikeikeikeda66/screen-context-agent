@@ -74,7 +74,8 @@ def backup(settings, target, passphrase, actor="cli"):
     images = sorted(p for p in (settings.root / "images").glob("*") if p.is_file())
     with tempfile.TemporaryDirectory(dir=target.parent) as temp:
         snapshot = Path(temp) / "history.db"
-        store.snapshot(settings, snapshot)
+        version = store.snapshot(settings, snapshot)
+        manifest["schema"] = version
         partial = Path(temp) / "backup.zip"
         with zipfile.ZipFile(partial, "w", zipfile.ZIP_STORED) as archive:
             archive.writestr("manifest.json", json.dumps(manifest))
@@ -84,8 +85,10 @@ def backup(settings, target, passphrase, actor="cli"):
                 if (settings.root / name).exists(): archive.write(settings.root / name, name)
         os.replace(partial, target)
     target.chmod(0o600)
-    audit.record(settings, "user", actor, "backup", params={"images": len(images)})
-    return {"backup": str(target), "images": len(images), "encrypted": manifest["encrypted"]}
+    # An outdated or newer database cannot take the audit row; init or the newer binary records later use (#70)
+    audited = version == store.SCHEMA_VERSION
+    if audited: audit.record(settings, "user", actor, "backup", params={"images": len(images)})
+    return {"backup": str(target), "images": len(images), "encrypted": manifest["encrypted"], "schema": version, "audited": audited}
 
 
 def restore(settings, source, passphrase, replace=False):
@@ -93,6 +96,8 @@ def restore(settings, source, passphrase, replace=False):
     with zipfile.ZipFile(source) as archive:
         manifest = json.loads(archive.read("manifest.json"))
         if manifest.get("format") != FORMAT: raise ValueError("Unknown backup format")
+        schema = manifest.get("schema")
+        if isinstance(schema, int) and schema > store.SCHEMA_VERSION: raise store.SchemaMismatch(schema, store.SCHEMA_VERSION)
         if manifest["encrypted"] == settings.plaintext: raise ValueError("Backup and data folder differ in encryption mode")
         key = None
         if manifest["encrypted"]:

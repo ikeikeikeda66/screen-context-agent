@@ -129,8 +129,9 @@ def health(settings, now=None):
 
 
 def derive_state(h):
-    # An outdated database (upgrade without `init`) blocks every reader and writer, so it comes first.
-    if h.get("database_schema") not in (None, 0, h.get("schema_version")): return "needs_init"
+    # An outdated or newer database blocks every reader and writer, so it comes first.
+    db, current = h.get("database_schema"), h.get("schema_version")
+    if db not in (None, 0, current): return "needs_newer_binary" if db > current else "needs_init"
     if h["paused"]: return "paused"
     if not h["capture"]["running"]: return "capture_stopped"
     if h["permission"] == "denied": return "permission_error"
@@ -142,4 +143,4 @@ def derive_state(h):
 
 
 # States in which observations must not be treated as the user's current work.
-NOT_CURRENT = {"needs_init", "paused", "capture_stopped", "permission_error", "locked", "indexer_stopped"}
+NOT_CURRENT = {"needs_init", "needs_newer_binary", "paused", "capture_stopped", "permission_error", "locked", "indexer_stopped"}

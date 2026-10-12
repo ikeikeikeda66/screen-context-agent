@@ -92,6 +92,7 @@ def maintain(settings, now=None):
     from .service import Service
     from datetime import datetime
     from . import purge
+    with store.connect(settings, readonly=True): pass  # a database from another version stops here, before any spool frame is deleted (#70)
     now = now or time.time()
     cutoff = settings.preview_cutoff(now)
     text_days, audit_days = settings.retention("text_retention_days"), settings.retention("audit_retention_days")

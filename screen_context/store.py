@@ -87,6 +87,18 @@ MIGRATIONS = {1: SCHEMA, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4}
 SCHEMA_VERSION = max(MIGRATIONS)
 
 
+class SchemaMismatch(RuntimeError):
+    """The database was written by a different version. `newer` tells which side must change (#70)."""
+    def __init__(self, found, expected):
+        self.found, self.expected = found, expected
+        if found > expected: message = f"Database schema version {found} is newer than this binary ({expected}); update screen-context and do not run init"
+        else: message = f"Database schema version {found} does not match {expected}; run screen-context init after backing up history.db"
+        super().__init__(message)
+
+    @property
+    def newer(self): return self.found > self.expected
+
+
 @contextmanager
 def connect(settings, readonly=False, migrating=False):
     driver = sqlite3
@@ -107,7 +119,7 @@ def connect(settings, readonly=False, migrating=False):
         # Both readers and writers refuse a mismatch: an outdated DB needs an explicit migration
         # (with a backup), and a newer DB must not be read or written by an old binary.
         if not migrating and version not in (0, SCHEMA_VERSION):
-            raise RuntimeError(f"Database schema version {version} does not match {SCHEMA_VERSION}; run screen-context init after backing up history.db")
+            raise SchemaMismatch(version, SCHEMA_VERSION)
         yield con
         if not readonly: con.commit()
     except BaseException:
@@ -119,7 +131,7 @@ def connect(settings, readonly=False, migrating=False):
 def migrate(con):
     """Apply pending migrations in order. Returns (before, after) versions."""
     before = con.execute("PRAGMA user_version").fetchone()[0]
-    if before > SCHEMA_VERSION: raise RuntimeError(f"Database schema version {before} is newer than this binary ({SCHEMA_VERSION})")
+    if before > SCHEMA_VERSION: raise SchemaMismatch(before, SCHEMA_VERSION)
     for version in sorted(MIGRATIONS):
         if version > before:
             con.executescript(MIGRATIONS[version])
@@ -127,7 +139,18 @@ def migrate(con):
     return before, SCHEMA_VERSION
 
 
+def peek_version(settings):
+    """user_version through a read-only connection, or None without a readable database. Changes nothing."""
+    if not settings.db.exists(): return None
+    try:
+        with connect(settings, readonly=True, migrating=True) as con: return con.execute("PRAGMA user_version").fetchone()[0]
+    except SchemaMismatch: raise
+    except RuntimeError: return None  # e.g. no key yet: initialize reports it the usual way
+
+
 def initialize(settings):
+    found = peek_version(settings)
+    if found is not None and found > SCHEMA_VERSION: raise SchemaMismatch(found, SCHEMA_VERSION)
     settings.prepare()
     if not settings.plaintext: get_key(settings, create=True)
     legacy = settings.root / "audit.jsonl"
@@ -143,14 +166,17 @@ def initialize(settings):
 
 
 def snapshot(settings, path):
-    """Consistent copy of the database while writers may be running, encrypted with the same key."""
-    with connect(settings, readonly=True) as source:
+    """Consistent copy of the database while writers may be running, encrypted with the same key.
+    Older and newer databases are copied as is (read only); callers decide what to do with them. Returns the copied version."""
+    with connect(settings, readonly=True, migrating=True) as source:
+        version = source.execute("PRAGMA user_version").fetchone()[0]
         driver = sqlite3 if settings.plaintext else __import__("sqlcipher3.dbapi2", fromlist=["dbapi2"])
         target = driver.connect(str(path))
         try:
             if not settings.plaintext: target.execute('PRAGMA key = "x\'' + get_key(settings).hex() + '\'"')
             source.backup(target)
         finally: target.close()
+    return version
 
 
 def count_skip(con, day, category):

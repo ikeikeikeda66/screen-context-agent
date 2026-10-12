@@ -297,6 +297,9 @@ MESSAGES = {
         "review.rule": "Rule",
         "review.no_skips": "No screens were held back in this period.",
         "review.pii_check": "False positives: save a sample text to a file and run `screen-context pii-check FILE`; do not paste the text into an issue.",
+        # Database written by another version (#70)
+        "schema.outdated": "The database ({db}) uses schema v{found}, older than this version (v{expected}). Back up first (`screen-context backup FILE`, or copy the data folder), then run `screen-context init`.",
+        "schema.newer": "The database ({db}) uses schema v{found}, newer than this version (v{expected}). Do not run `screen-context init`. Update ScreenContext to a newer version.",
     },
     "ja": {
         "menu.title.recording": "SC 撮影",
@@ -577,6 +580,9 @@ MESSAGES = {
         "review.rule": "ルール",
         "review.no_skips": "この期間に記録を控えた画面はありません。",
         "review.pii_check": "誤検出の確認：サンプルの文章をファイルに保存し、`screen-context pii-check FILE` を実行してください。文章そのものは Issue に貼らないでください。",
+        # 別のバージョンが書いたデータベース（#70）
+        "schema.outdated": "データベース（{db}）のスキーマ v{found} は、このバージョン（v{expected}）より古い形式です。先にバックアップ（`screen-context backup FILE` またはデータフォルダのコピー）を取り、`screen-context init` を実行してください。",
+        "schema.newer": "データベース（{db}）のスキーマ v{found} は、このバージョン（v{expected}）より新しい形式です。`screen-context init` は実行しないでください。ScreenContext を新しいバージョンに更新してください。",
     },
 }
 
@@ -636,3 +642,8 @@ def auth(key, lang="en", **values):
 
 def interval_label(seconds, lang):
     return t("interval.seconds", lang, n=seconds) if seconds < 60 else t("interval.minutes", lang, n=seconds // 60)
+
+
+def schema_message(error, lang="en", db="history.db"):
+    """One line for a database written by another version: `error` is store.SchemaMismatch (found, expected, newer)."""
+    return t("schema.newer" if error.newer else "schema.outdated", lang, found=error.found, expected=error.expected, db=db)
