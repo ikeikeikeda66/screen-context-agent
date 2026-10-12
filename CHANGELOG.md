@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- MCP: `get_snapshot_image` spells out its four annotation hints in its decorator, as `get_current_screen` does, so static scanners see them. The values sent in `tools/list` are unchanged; a test now checks the raw `tools/list` of a real `serve --profile full` process (#77).
 - Sensitive input: a table of accounts or people (a header with two of name, ID, password, phone, postal code and address columns, one of them name, ID or password, then at least two rows with values of those kinds) drops the whole frame, as card numbers do. On by default through the new `sensitive_tables` policy key, so existing `policy.json` files get it too; set it to `[]` to turn it off (#65).
 - MCP: every tool declares all four annotation hints. `get_current_screen` is now marked as not read-only and not idempotent, because each approved call stores a new frame (#73).
 - `push`: `VIKING_API_KEY` is sent only to the loopback OpenViking endpoint. Environment proxies are not used, redirects are not followed, and no empty key header is sent (#73).
