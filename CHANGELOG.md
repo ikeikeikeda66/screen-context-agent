@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- Sensitive input: a table of accounts or people (a header with two of name, ID, password, phone, postal code and address columns, one of them name, ID or password, then at least two rows with values of those kinds) drops the whole frame, as card numbers do. On by default through the new `sensitive_tables` policy key, so existing `policy.json` files get it too; set it to `[]` to turn it off (#65).
 - MCP: every tool declares all four annotation hints. `get_current_screen` is now marked as not read-only and not idempotent, because each approved call stores a new frame (#73).
 - `push`: `VIKING_API_KEY` is sent only to the loopback OpenViking endpoint. Environment proxies are not used, redirects are not followed, and no empty key header is sent (#73).
 - MCP: `get_activity_between(start, end)` returns activity blocks built only from frames inside the range (at most 7 days), in both profiles. [examples/activitywatch](examples/activitywatch) uses it to look up what ScreenContext saw during a time range from ActivityWatch; it only reads from ActivityWatch (#66).
@@ -20,7 +21,7 @@
 - Windows: `health` reports a locked session.
 - Windows control window: "Open Today…" (after Windows Hello or the sign-in password) and "Delete Recent" (last 5 min, 15 min or hour, the same purge path) (#33).
 
-日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、アカウントや個人の一覧表を含む画面の破棄（`sensitive_tables`）、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
 
 ## 0.2.0 — Trust foundation / 信頼の土台
 

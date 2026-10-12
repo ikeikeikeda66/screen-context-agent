@@ -17,6 +17,8 @@ DEFAULT_POLICY = {
     # writes every key into policy.json: new defaults under an existing key would never reach
     # existing users. Set a key to [] to turn that rule off.
     "sensitive_detectors": ["card_number", "my_number"],
+    # Tables of accounts (name, ID, password columns), #65. Same detectors as above.
+    "sensitive_tables": ["account_list"],
     "sensitive_apps": ["com.apple.AddressBook"],
     "sensitive_title_patterns": [r"(?i)\bcheckout\b|payment details|billing information|お支払い(方法|手続き|情報)|ご注文手続き|レジに進む"],
     "sensitive_url_patterns": [r"(?i)/(checkout|payment|billing)(?:[/?#]|$)"],
@@ -144,5 +146,6 @@ class Settings:
         from .pii import parse
         from .sensitive import DETECTORS
         parse(result["pii_combinations"])
-        if set(result["sensitive_detectors"]) - set(DETECTORS): raise ValueError("Invalid policy: sensitive_detectors")
+        for key in ("sensitive_detectors", "sensitive_tables"):
+            if set(result[key]) - set(DETECTORS): raise ValueError(f"Invalid policy: {key}")
         return result, origin
