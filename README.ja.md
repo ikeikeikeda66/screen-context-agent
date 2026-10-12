@@ -300,7 +300,7 @@ ScreenContext が防がないもの：
 
 - **macOS での配布**：アプリは公証を受けていないため、使う Mac の上でビルドする必要があります（[はじめかた](#はじめかたmacos)を参照）。
 - **個人情報の伏せ字** は OCR に依存します。8 文字（電話番号は 7 桁）未満の断片、点で区切った電話番号、別のアドレスや URL の中のドメインは残ることがあります。
-- **パスワード欄**：macOS の Secure Input が有効な間に撮影を止める機能は、まだありません（[#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)）。パスワード管理アプリは初期状態で除外しており、パスワード欄の文字は伏せ字で表示されます。
+- **パスワード欄**：macOS では、Secure Input が有効な間（パスワード欄がキーボードを占有している間）は撮影を止めます。判定は撮影の前と撮影の直後に行い、撮影中にパスワード欄へフォーカスが移った場合は画像を捨てます。撮影を控えた撮影周期は、ループでは `secure_input` として数えます（[#16](https://github.com/ikeikeikeda66/screen-context-agent/issues/16)）。`get_current_screen` は denied を返し、数えません。判定に失敗した場合も撮影は止まり、capture status に `error_type` が付きます。Secure Input を有効のままにするアプリ（ターミナルの「セキュアキーボード入力」など）があると、それを解除するまで撮影は止まります。Windows には同等の確認がまだありません。パスワード欄の文字は伏せ字で表示され、パスワード管理アプリは初期状態で除外しています。
 - **Windows** は Windows 11 23H2（単一モニター、96 DPI）で撮影・OCR、クライアント承認、DB 移行、Edge の決済ページ除外、資格情報マネージャーを使った backup・wipe・restore を確認済みです。他の DPI・複数モニター、Chrome のパスワード欄、撮影中の UAC 表示、連絡先アプリの既定除外は引き続き確認が必要です（[#25](https://github.com/ikeikeikeda66/screen-context-agent/issues/25)）。画面ロック中は撮影をスキップします（[#47](https://github.com/ikeikeikeda66/screen-context-agent/issues/47)）。[Windows のセットアップ](#windows-のセットアップ)も参照してください。
 
 ## 0.1 からの更新

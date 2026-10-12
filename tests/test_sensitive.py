@@ -136,3 +136,33 @@ def test_policy_files_written_before_the_rule_still_get_it(settings):
     assert enabled(settings.policy()) == ["card_number", "my_number", "account_list"]
     change(settings, sensitive_tables=["passport"])
     with pytest.raises(ValueError, match="sensitive_tables"): settings.policy()
+
+
+# --- secure input (#16): counted as a skip, never stored, no database created by the skip -----
+
+def test_secure_input_skips_are_counted_without_storing_frames(settings):
+    assert store.record_skip(settings, "secure_input") is True
+    assert store.record_skip(settings, "secure_input") is True
+    assert stored(settings) == (0, {"secure_input": 2})
+
+
+def test_record_skip_does_not_create_a_database(tmp_path):
+    from screen_context.config import Settings
+    value = Settings(tmp_path / "new", plaintext=True)
+    assert store.record_skip(value, "secure_input") is False
+    assert not value.db.exists()
+
+
+def test_record_skip_refuses_a_newer_schema(settings):
+    import sqlite3
+    raw = sqlite3.connect(settings.db)
+    raw.execute("PRAGMA user_version=99")
+    raw.commit()
+    raw.close()
+    assert store.record_skip(settings, "secure_input") is False
+
+
+def test_record_skip_swallows_errors(settings, monkeypatch):
+    def broken(*args, **kwargs): raise RuntimeError("boom")
+    monkeypatch.setattr(store, "connect", broken)
+    assert store.record_skip(settings, "secure_input") is False

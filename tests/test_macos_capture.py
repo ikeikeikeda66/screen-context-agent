@@ -42,3 +42,32 @@ def test_capture_raises_when_window_changed_since_foreground_snapshot(monkeypatc
     monkeypatch.setattr(macos.sck, "shareable_content", lambda: SimpleNamespace(windows=lambda: [stale_window]))
     with pytest.raises(RuntimeError, match="Window changed during capture request"):
         adapter.capture(front)
+
+
+def test_secure_input_reports_the_carbon_value():
+    adapter = macos.Backend.__new__(macos.Backend)
+    adapter._secure_input = lambda: True
+    assert adapter.secure_input() is True
+    adapter._secure_input = lambda: False
+    assert adapter.secure_input() is False
+
+
+def test_secure_input_raises_when_the_check_is_unavailable():
+    adapter = macos.Backend.__new__(macos.Backend)
+    adapter._secure_input = OSError("x")
+    with pytest.raises(OSError):
+        adapter.secure_input()
+
+
+def test_capture_treats_missing_secure_input_check_as_on():
+    from screen_context import capture
+    adapter = macos.Backend.__new__(macos.Backend)  # no _secure_input attribute: the method raises
+    assert capture.secure_input(adapter) is True
+
+
+def test_load_secure_input_raises_when_carbon_cannot_be_loaded(monkeypatch):
+    import ctypes
+    def unavailable(path): raise OSError("no Carbon")
+    monkeypatch.setattr(ctypes.cdll, "LoadLibrary", unavailable)
+    with pytest.raises(OSError):
+        macos.load_secure_input()

@@ -208,3 +208,17 @@ def test_purge_warns_about_copies_but_not_about_page_views(settings):
     audit.record(settings, "user", "ui.copy", "get_diary_material", frame_ids=[frame["id"]], count=1)  # copy for your assistant
     audit.record(settings, "agent", "cursor", "search_screen_history", frame_ids=[frame["id"]], count=1)
     assert {r["client"] for r in purge.plan(settings, [frame["id"]])["already_received_by"]} == {"ui.copy", "cursor"}
+
+
+def test_data_page_says_secure_input_was_not_recorded(settings, sessions):
+    assert store.record_skip(settings, "secure_input")
+    text = page(settings, sessions, "/data").text
+    assert "Capture skipped 1 times while secure input was on (such as password entry)" in text
+    assert "possible personal data (secure_input)" not in text
+
+
+def test_secure_input_skip_is_explained_in_japanese():
+    from screen_context import ui_views
+    html_text = ui_views.skipped(ui_views.Text("ja"), {"secure_input": 1})
+    assert "セキュア入力中（パスワード入力など）のため撮影を1回控えました" in html_text
+    assert "個人情報の可能性" not in html_text

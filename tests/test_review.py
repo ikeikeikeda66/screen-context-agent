@@ -101,3 +101,10 @@ def test_cli(settings):
     assert result["days"] == 7 and result["today_view"]["days_opened"] == 0
     assert run("--format", "md").stdout.startswith("## Dogfooding report")
     assert run("--days", "0").returncode != 0
+
+
+def test_secure_input_skips_are_reported_by_id(settings):
+    assert store.record_skip(settings, "secure_input")
+    result = review.report(settings, days=14)
+    assert result["sensitive_input"]["skipped"] == {"secure_input": 1}
+    assert "| `secure_input` | 1 |" in review.markdown(result, "en")

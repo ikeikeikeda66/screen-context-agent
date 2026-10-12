@@ -3,6 +3,7 @@ import io
 import json
 import time
 import uuid
+from . import store
 from .crypto import atomic_write, get_key, seal
 from .privacy import denied
 
@@ -30,6 +31,33 @@ def locked(adapter):
     """Platforms that can tell report a locked session; capture is skipped until it unlocks."""
     check = getattr(adapter, "session_locked", None)
     return bool(check and check())
+
+
+def _secure_input_state(adapter):
+    """(on, error_type): error_type names the exception class when the check failed, never its message."""
+    check = getattr(adapter, "secure_input", None)
+    if check is None: return False, None
+    try: return bool(check()), None
+    except Exception as error: return True, type(error).__name__
+
+
+def secure_input(adapter):
+    """True while the OS says a secure field has the keyboard (#16). A platform without the check reports False;
+    a check that fails reports True, so a failure never turns into a capture."""
+    return _secure_input_state(adapter)[0]
+
+
+def _secure_skip(settings, adapter):
+    """Count and record a capture cycle that Secure Input stops (#16). Returns True when the cycle was skipped.
+    Called before the capture and again right after it, so a field that gets focus mid-capture drops the image."""
+    on, error_type = _secure_input_state(adapter)
+    if not on: return False
+    # Only the reason is kept: nothing about the window that was not captured (#16).
+    status = {"ts": time.time(), "status": "secure_input"}
+    if error_type: status["error_type"] = error_type
+    atomic_write(settings.root / "capture-status.json", json.dumps(status).encode())
+    store.record_skip(settings, "secure_input")
+    return True
 
 
 def backend():
@@ -82,11 +110,20 @@ def run(settings, once=False, stop=None):
             previous_identity = None
             if once: return {"status": "locked"}
             stop.wait(1); continue
+        if _secure_skip(settings, adapter):
+            previous_identity = None
+            if once: return {"status": "secure_input"}
+            stop.wait(1); continue
         try:
             image, meta = adapter.capture(front)
         except Exception as error:
             atomic_write(settings.root / "capture-status.json", json.dumps({"ts": time.time(), "status": "error", "error_type": type(error).__name__}).encode())
             if once: raise
+            stop.wait(1); continue
+        # The field may have taken focus during the capture: the image is dropped, never spooled.
+        if _secure_skip(settings, adapter):
+            previous_identity = None
+            if once: return {"status": "secure_input"}
             stop.wait(1); continue
         if adapter.foreground() != front:
             if once: return {"status": "foreground_changed"}

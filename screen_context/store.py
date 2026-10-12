@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import time
 from contextlib import contextmanager
 from .crypto import get_key
 
@@ -183,6 +184,21 @@ def count_skip(con, day, category):
     """Count a frame that was not stored, by reason only."""
     con.execute("INSERT INTO skip_counts (day, category, count) VALUES (?, ?, 1) "
                 "ON CONFLICT(day, category) DO UPDATE SET count = count + 1", (day, category))
+
+
+# Reasons for which a capture was not taken at all, as opposed to the detectors in sensitive.DETECTORS (#16).
+CAPTURE_SKIPS = ("secure_input",)
+
+
+def record_skip(settings, category, day=None):
+    """Count one capture cycle that was not taken, by reason only. Returns True when counted.
+    Best effort: a failed counter must never stop the capture loop, so every error is caught (sqlcipher3 and keyring
+    raise types outside sqlite3.Error). A missing database is left alone, because connect() would create an empty file."""
+    if not settings.db.exists(): return False
+    try:
+        with connect(settings) as con: count_skip(con, day or time.strftime("%Y-%m-%d"), category)
+    except Exception: return False
+    return True
 
 
 def insert(con, record):
