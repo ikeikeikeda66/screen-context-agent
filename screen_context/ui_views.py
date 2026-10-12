@@ -225,7 +225,8 @@ def skipped(x, counts):
     if not counts: return f'<p>{x("ui.skipped.none")}</p>'
     items = []
     for category, n in counts.items():
-        if category in DETECTORS: items.append(x("ui.skipped.dropped", n=n, what=t("ui.skip." + category, x.lang)))
+        if category in store.CAPTURE_SKIPS: items.append(x("ui.skipped." + category, n=n))  # counted in cycles, not screens
+        elif category in DETECTORS: items.append(x("ui.skipped.dropped", n=n, what=t("ui.skip." + category, x.lang)))
         else: items.append(x("ui.skipped.redacted", n=n, what=t("ui.skip.combination", x.lang, rule=category)))
     return "<ul>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
 

@@ -40,6 +40,9 @@ class Backend:
         try: return foreground_is_lock_screen(self.user)
         except OSError: return False
 
+    # Secure Input (#16): Windows has no equivalent check here yet. A `secure_input(self)` method added to this class
+    # is picked up by capture.secure_input() with no other change: return True to skip the capture (an exception counts as True).
+
     def window_identity(self, hwnd):
         import psutil
         if not hwnd or not self.user.IsWindow(hwnd):

@@ -66,3 +66,12 @@ def test_status_does_not_expose_error_payload(tmp_path):
     assert "private" not in status_text(path)
     path.write_text('{')
     assert status_text(path, "ja") == "処理記録なし"
+
+
+def test_secure_input_status_says_skipped_not_processed(tmp_path):
+    path = tmp_path / "status.json"
+    path.write_text(json.dumps({"ts": 1789260000, "status": "secure_input"}))
+    en = status_text(path, "en")
+    assert "Skipped (secure input)" in en and "Processed" not in en
+    ja = status_text(path, "ja")
+    assert "撮影を控えた（セキュア入力中）" in ja and "処理済み" not in ja

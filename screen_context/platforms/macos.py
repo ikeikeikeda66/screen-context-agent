@@ -6,11 +6,24 @@ from Foundation import NSMutableData, NSDate, NSRunLoop
 from . import sck
 
 
+CARBON = "/System/Library/Frameworks/Carbon.framework/Carbon"
+
+
+def load_secure_input():
+    """IsSecureEventInputEnabled from Carbon: True while some app has Secure Input on (a password field has focus)."""
+    import ctypes
+    function = ctypes.cdll.LoadLibrary(CARBON).IsSecureEventInputEnabled
+    function.restype, function.argtypes = ctypes.c_bool, []
+    return function
+
+
 class Backend:
     def __init__(self):
         NSApplication.sharedApplication()
         if not Quartz.CGPreflightScreenCaptureAccess():
             raise PermissionError("Grant Screen Recording to ScreenContext.app, then relaunch with open")
+        try: self._secure_input = load_secure_input()
+        except (OSError, AttributeError) as error: self._secure_input = error  # secure_input() raises it, and capture treats that as on
 
     def foreground(self):
         # NSWorkspace caches activation state until Cocoa processes its events.
@@ -34,6 +47,11 @@ class Backend:
 
     def idle_seconds(self):
         return Quartz.CGEventSourceSecondsSinceLastEventType(Quartz.kCGEventSourceStateCombinedSessionState, Quartz.kCGAnyInputEventType)
+
+    def secure_input(self):
+        """True while Secure Input is on (#16). Raises when the check is unavailable; capture then skips the frame."""
+        if isinstance(self._secure_input, Exception): raise self._secure_input
+        return bool(self._secure_input())
 
     def list_displays(self): return sck.list_displays()
 

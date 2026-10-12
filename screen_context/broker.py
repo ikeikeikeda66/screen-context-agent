@@ -98,16 +98,19 @@ def process_requests(settings, adapter):
             req = json.loads(path.read_text())
             if req["expires"] <= time.time():
                 path.unlink(missing_ok=True); continue
-            from .capture import locked
+            from .capture import locked, secure_input
             target = adapter.foreground()
             # Nobody can approve on a locked screen, and capturing then can crash the capture library (#47).
-            allowed = not locked(adapter) and not denied(settings.policy(), target) and adapter.approve_current()
+            allowed = not locked(adapter) and not secure_input(adapter) and not denied(settings.policy(), target) and adapter.approve_current()
             result = {"status": "denied"}
             # Capture the exact window selected before the dialog, never the dialog itself.
-            if allowed and path.exists() and time.time() < req["expires"] and not (settings.root / "paused").exists():
+            # The user may have focused a password field while the dialog was open: check again before capturing.
+            if allowed and path.exists() and time.time() < req["expires"] and not (settings.root / "paused").exists() and not secure_input(adapter):
                 image, metadata = adapter.capture(target)
-                frame = spool(settings, image, {**target, **metadata})
-                if frame: result = {"status": "approved", "frame_id": frame["id"]}
+                # A secure field may have taken focus during the capture: the image is dropped, never spooled.
+                if not secure_input(adapter):
+                    frame = spool(settings, image, {**target, **metadata})
+                    if frame: result = {"status": "approved", "frame_id": frame["id"]}
             if path.exists(): atomic_write(reply, json.dumps(result).encode())
         except Exception:
             if path.exists(): atomic_write(reply, b'{"status":"denied"}')

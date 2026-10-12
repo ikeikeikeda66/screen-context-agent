@@ -130,7 +130,7 @@ def status_text(path, lang="en"):
         data = json.loads(path.read_text(encoding="utf-8"))
         timestamp = datetime.fromtimestamp(float(data["ts"])).strftime("%m/%d %H:%M:%S")
         if "status" in data:
-            value = t({"spooled": "status.spooled", "excluded": "status.excluded", "error": "status.error"}.get(data["status"], "status.other"), lang)
+            value = t({"spooled": "status.spooled", "excluded": "status.excluded", "secure_input": "status.secure_input", "error": "status.error"}.get(data["status"], "status.other"), lang)
         else:
             value = t("status.indexed", lang, indexed=int(data.get("indexed", 0)), failed=int(data.get("failed", 0)))
         return f"{timestamp}　{value}"
