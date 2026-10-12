@@ -64,7 +64,10 @@ def create_server(settings, profile="standard", client=None, authorize=None):
         tool(name="submit_proposal", description="Register one proposal for an open run_id from the pre-run material. Returns decision=deliver with the message to send, or suppressed_duplicate.",
                     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False))(service.submit_proposal)
 
-        @tool(annotations=annotations, description="Explicitly retrieve a retained screenshot, subject to current exclusions.")
+        # Literal hints, not the shared `annotations`: static scanners read decorator arguments
+        # as written and do not resolve variables (#77).
+        @tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+              description="Explicitly retrieve a retained screenshot, subject to current exclusions.")
         def get_snapshot_image(frame_id: str) -> list[TextContent | ImageContent]:
             data = service.get_snapshot_image(frame_id)
             return [TextContent(type="text", text=NOTICE), ImageContent(type="image", data=base64.b64encode(data).decode(), mimeType="image/webp")]
