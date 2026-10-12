@@ -8,22 +8,26 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent, ToolAnnotations
 from . import access
 from .privacy import NOTICE
-from .service import CURRENT_CLIENT, Service
+from .service import CURRENT_CLIENT, InvalidArgument, Service
 
 
 def guarded(function, authorize):
     """Run a tool only for an authorized client, and name that client in the audit log.
-    Checking on every call makes a revoked token stop working without restarting the server."""
-    if authorize is None: return function
-
+    Checking on every call makes a revoked token stop working without restarting the server.
+    Without `authorize` (tests only) the call is accepted as is. Either way a caller mistake
+    (InvalidArgument) reaches the client as its own text; anything else stays a crash for the SDK to log (#69)."""
     @functools.wraps(function)
     def call(*args, **kwargs):
-        # ToolError reaches the client verbatim, so a revoked client learns how to reconnect.
-        try: client = authorize()
-        except PermissionError as error: raise ToolError(str(error)) from error
-        reset = CURRENT_CLIENT.set(client)
+        reset = None
+        if authorize is not None:
+            # ToolError reaches the client verbatim, so a revoked client learns how to reconnect.
+            try: client = authorize()
+            except PermissionError as error: raise ToolError(str(error)) from error
+            reset = CURRENT_CLIENT.set(client)
         try: return function(*args, **kwargs)
-        finally: CURRENT_CLIENT.reset(reset)
+        except InvalidArgument as error: raise ToolError(str(error)) from error
+        finally:
+            if reset is not None: CURRENT_CLIENT.reset(reset)
     return call
 
 
