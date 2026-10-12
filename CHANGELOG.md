@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- MCP: invalid tool input returns its reason (for example `start must be before end`) instead of a generic error, and the server no longer logs a traceback for it. Other internal errors stay generic. Dates must be zero-padded `YYYY-MM-DD`; `push`, `export DATE` and `diary-material` reject other forms with a usage error (#69).
 - MCP: `get_snapshot_image` spells out its four annotation hints in its decorator, as `get_current_screen` does, so static scanners see them. The values sent in `tools/list` are unchanged; a test now checks the raw `tools/list` of a real `serve --profile full` process (#77).
 - Sensitive input: a table of accounts or people (a header with two of name, ID, password, phone, postal code and address columns, one of them name, ID or password, then at least two rows with values of those kinds) drops the whole frame, as card numbers do. On by default through the new `sensitive_tables` policy key, so existing `policy.json` files get it too; set it to `[]` to turn it off (#65).
 - MCP: every tool declares all four annotation hints. `get_current_screen` is now marked as not read-only and not idempotent, because each approved call stores a new frame (#73).
@@ -22,7 +23,7 @@
 - Windows: `health` reports a locked session.
 - Windows control window: "Open Today…" (after Windows Hello or the sign-in password) and "Delete Recent" (last 5 min, 15 min or hour, the same purge path) (#33).
 
-日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、アカウントや個人の一覧表を含む画面の破棄（`sensitive_tables`）、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、アカウントや個人の一覧表を含む画面の破棄（`sensitive_tables`）、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。MCP ツールへの不正な入力には、汎用エラーではなく理由を返すようにしました。日付はゼロ埋めの `YYYY-MM-DD` だけを受け付けます。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
 
 ## 0.2.0 — Trust foundation / 信頼の土台
 
