@@ -87,3 +87,41 @@ def test_broker_requires_approval(tmp_path, approve):
             with pytest.raises(PermissionError): request_current(Service(cfg,"full"), timeout=2)
     finally: stop.set(); thread.join()
     assert not list((tmp_path/"requests").iterdir())
+
+
+HINTS = ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")
+
+
+def test_tools_list_over_stdio_declares_all_four_hints(tmp_path):
+    """#77: the raw `tools/list` response of a real `serve --profile full` process."""
+    cfg = Settings(tmp_path, plaintext=True); store.initialize(cfg)
+    from screen_context import access
+    token = access.issue(cfg, "scanner", "full")
+    access.decide(cfg, "scanner", True, "cli")
+    async def run():
+        params = StdioServerParameters(command=sys.executable, args=["-m", "screen_context.cli", "serve", "--profile", "full"],
+                                       env={**os.environ, "SCREEN_CONTEXT_HOME": str(tmp_path), "SCREEN_CONTEXT_PLAINTEXT": "1", "SCREEN_CONTEXT_CLIENT_TOKEN": token})
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                return (await session.list_tools()).model_dump(by_alias=True, exclude_none=True)["tools"]
+    tools = {t["name"]: t["annotations"] for t in asyncio.run(run())}
+    assert len(tools) == 13 and "get_snapshot_image" in tools
+    for name, hints in tools.items():
+        assert set(HINTS) <= set(hints) and all(isinstance(hints[h], bool) for h in HINTS), name
+
+
+def test_decorated_tools_spell_out_their_hints():
+    """#77: scanners read decorator arguments as written, so every `@tool(...)` passes a literal
+    ToolAnnotations with all four hints rather than a variable."""
+    import ast
+    from screen_context import mcp_server
+    tree = ast.parse(open(mcp_server.__file__, encoding="utf-8").read())
+    decorated = [(f.name, d) for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)
+                 for d in f.decorator_list if isinstance(d, ast.Call) and getattr(d.func, "id", None) == "tool"]
+    assert {name for name, _ in decorated} == {"get_snapshot_image", "get_current_screen"}
+    for name, call in decorated:
+        [value] = [k.value for k in call.keywords if k.arg == "annotations"]
+        assert isinstance(value, ast.Call) and value.func.id == "ToolAnnotations", name
+        assert {k.arg for k in value.keywords} == set(HINTS), name
+        assert all(isinstance(k.value, ast.Constant) and isinstance(k.value.value, bool) for k in value.keywords), name
