@@ -7,7 +7,7 @@ from .config import Settings
 from .service import PROFILES, PROFILE_ALIASES, InvalidArgument, day_range
 
 
-def main():
+def _main():
     # Output is JSON for scripts. Frozen Windows builds ignore PYTHONIOENCODING and would write the
     # ANSI code page (cp932 on Japanese systems), which UTF-8 readers cannot decode (#44).
     for stream in (sys.stdout, sys.stderr):
@@ -108,6 +108,7 @@ def main():
         answer = args.confirm or input(f"This deletes the encryption key and everything in {settings.root}. Type ERASE to continue: ")
         if answer != "ERASE": parser.error("not confirmed; nothing was deleted")
         try: result = lifecycle.wipe(settings)
+        except store.SchemaMismatch: raise
         except (RuntimeError, FileNotFoundError) as error: parser.error(str(error))
     elif args.command in ("backup", "restore"):
         from pathlib import Path
@@ -120,6 +121,7 @@ def main():
         try:
             result = lifecycle.backup(settings, args.file, passphrase) if args.command == "backup" else \
                 lifecycle.restore(settings, args.file, passphrase, args.replace)
+        except store.SchemaMismatch: raise
         except (ValueError, PermissionError, FileExistsError, RuntimeError) as error: parser.error(str(error))
     elif args.command == "usage":
         from .storage import usage
@@ -262,6 +264,17 @@ def main():
                 result = export.write(settings, since, until, args.format, args.out, args.exclude_ide)
             except (ValueError, PermissionError, FileExistsError) as error: parser.error(str(error))
     print(json.dumps(result, ensure_ascii=False))
+
+
+def main():
+    from . import store
+    try: _main()
+    except store.SchemaMismatch as error:
+        # One line instead of a traceback; stdout stays empty, so `serve` and JSON readers are unaffected (#70).
+        from .i18n import resolve, schema_message
+        settings = Settings.environment()
+        print(schema_message(error, resolve(settings), db=str(settings.db)), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__": main()

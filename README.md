@@ -314,6 +314,13 @@ The database schema, MCP entries and approval flow changed. Existing history is 
 5. Run `mcp-config` again for every client and replace its ScreenContext entry. Entries from 0.1 no longer start the server. Approve each client at its first call.
 6. Optional: run `screen-context pii-scan`, then `pii-scan --apply`, to apply the new sensitive-input rules to history recorded before 0.2.
 
+## When the database schema does not match
+
+Commands that read the database print one line and exit with status 1 when the database was written by a different version. The MCP server answers with the same line and returns no data: over stdio it keeps running and answers every tool call, and over HTTP it answers 503.
+
+- **Older database**: back up first with `screen-context backup FILE`, or copy the data folder. Then run `screen-context init`. Until then `health` reports `needs_init`. A backup of such a database is not recorded in the access log (`"audited": false`).
+- **Newer database** (written by a newer version): do not run `init`. Update ScreenContext. `health` reports `needs_newer_binary`. `init` leaves such a database untouched, and `restore` refuses an archive from a newer version before replacing anything.
+
 ## Configuration
 
 | Environment variable | Purpose |

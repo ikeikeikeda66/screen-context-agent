@@ -110,3 +110,20 @@ def test_cli_output_is_utf8_even_when_the_console_code_page_is_not(tmp_path):
     env = {"SCREEN_CONTEXT_HOME": str(home), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin", "PYTHONIOENCODING": "cp932"}
     out = subprocess.run([sys.executable, "-m", "screen_context.cli", "init"], env=env, capture_output=True, check=True).stdout
     assert json.loads(out.decode("utf-8"))["root"] == str(home)
+
+
+# Schema mismatch messages (#70): both catalogs, chosen by SchemaMismatch.newer.
+def test_schema_messages_name_the_fix_in_both_languages():
+    from types import SimpleNamespace
+    for lang in ("en", "ja"):
+        old = i18n.schema_message(SimpleNamespace(found=3, expected=4, newer=False), lang, db="history.db")
+        new = i18n.schema_message(SimpleNamespace(found=9, expected=4, newer=True), lang, db="history.db")
+        for text in (old, new):
+            assert "v4" in text and "history.db" in text and "{" not in text
+        assert "v3" in old and "v9" in new
+        if lang == "en":
+            assert "backup" in old and "init" in old
+            assert "backup" not in new and "Update" in new
+        if lang == "ja":
+            assert "screen-context backup" in old and "screen-context init" in old
+            assert "backup" not in new and "更新" in new

@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- A database written by another version no longer ends in a traceback. CLI commands print one line (English or Japanese) and exit with status 1; the MCP server answers each tool call with that line over stdio, and HTTP requests with 503 and that line. `maintain` and `index` stop before deleting old spool frames. An older database says to back up and run `screen-context init`; a newer one says not to run `init` and to update. `health` reports the newer case as `needs_newer_binary`, `backup` works on either (not recorded in the access log, `"audited": false`), `init` leaves a newer database unchanged, and `restore` refuses an archive from a newer version before replacing anything (#70).
 - MCP: invalid tool input returns its reason (for example `start must be before end`) instead of a generic error, and the server no longer logs a traceback for it. Other internal errors stay generic. Dates must be zero-padded `YYYY-MM-DD`; `push`, `export DATE` and `diary-material` reject other forms with a usage error (#69).
 - MCP: `get_snapshot_image` spells out its four annotation hints in its decorator, as `get_current_screen` does, so static scanners see them. The values sent in `tools/list` are unchanged; a test now checks the raw `tools/list` of a real `serve --profile full` process (#77).
 - Sensitive input: a table of accounts or people (a header with two of name, ID, password, phone, postal code and address columns, one of them name, ID or password, then at least two rows with values of those kinds) drops the whole frame, as card numbers do. On by default through the new `sensitive_tables` policy key, so existing `policy.json` files get it too; set it to `[]` to turn it off (#65).
@@ -23,7 +24,7 @@
 - Windows: `health` reports a locked session.
 - Windows control window: "Open Today…" (after Windows Hello or the sign-in password) and "Delete Recent" (last 5 min, 15 min or hour, the same purge path) (#33).
 
-日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、アカウントや個人の一覧表を含む画面の破棄（`sensitive_tables`）、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。MCP ツールへの不正な入力には、汎用エラーではなく理由を返すようにしました。日付はゼロ埋めの `YYYY-MM-DD` だけを受け付けます。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。
+日本語：ローカル Web UI、Today ビュー（ダイジェスト・検索・コピー）、「直前の作業」カード、利用状況レポート（`review`）、Touch ID / Windows Hello による再認証（Today を開く・出力・バックアップ・承認）、メニューバーアプリによる indexer の起動と「ログイン時に起動」、アカウントや個人の一覧表を含む画面の破棄（`sensitive_tables`）、時間帯を限定する MCP ツール `get_activity_between` と ActivityWatch 連携の例、Windows の操作ウィンドウの「Today を開く」「最近の記録を削除」を追加しました。MCP ツールへの不正な入力には、汎用エラーではなく理由を返すようにしました。日付はゼロ埋めの `YYYY-MM-DD` だけを受け付けます。DB スキーマが v4 になったため、更新後に `screen-context init` を実行してください。別のバージョンが書いた DB では、トレースバックではなく1行の案内（古い DB はバックアップ後に init、新しい DB は更新）を表示するようにしました。
 
 ## 0.2.0 — Trust foundation / 信頼の土台
 
