@@ -4,11 +4,13 @@ A frame whose OCR text contains a card number or a My Number is dropped whole, t
 image, before anything is written. Both detectors check a checksum, so order numbers,
 phone numbers and dates rarely match. Only the category is counted, never the content.
 
-`account_list` (#65) drops a frame that shows a table of accounts: a header row with at least two
-of name, ID and password columns, followed by at least two rows with IDs, e-mail addresses or
-masked values. A login form has the labels but not the rows, so it is kept.
+`account_list` (#65) drops a frame that shows a table of accounts or people: a header row with
+at least two of name, ID, password, phone, postal code and address columns, one of them name, ID
+or password, followed by at least two rows with IDs, e-mail addresses, masked values, phone
+numbers, postal codes or addresses. A login form has the labels but not the rows, so it is kept.
 """
 import re
+from .pii import ADDRESS, phone
 
 # Digits with optional single spaces or hyphens between them.
 CARD = re.compile(r"(?<![\d-])\d(?:[ -]?\d){12,18}(?![\d-])")
@@ -60,11 +62,18 @@ COLUMNS = {
     "id": re.compile(r"(?:ユーザー|ログイン|アカウント|社員|会員)\s*(?:ID|ＩＤ|名)|アカウント|メールアドレス|"
                      + ASCII.format(r"(?:ＩＤ|(?i:id|user\s*(?:id|name)|login(?:\s*id)?|account(?:\s*id)?|e-?mail))")),
     "password": re.compile(r"パスワード|暗証番号|" + ASCII.format(r"(?i:pass\s*word|passwd|passcode|pwd?)")),
+    "phone": re.compile(r"電話|携帯|ＴＥＬ|" + ASCII.format(r"(?:TEL|Tel|FAX|Fax|(?i:phone(?:\s*number)?|mobile))")),
+    "postal": re.compile(r"郵便番号|〒|" + ASCII.format(r"(?i:zip(?:\s*code)?|postal\s*code|post\s*code)")),
+    # Not "E-mail address" or "IP address".
+    "address": re.compile(r"住所|所在地|" + ASCII.format(r"(?i:(?<!mail )(?<!ip )address)")),
 }
+# A table of postal codes, or of phone numbers and addresses, is a directory, not a list of people.
+PERSON = {"name", "id", "password"}
 # A header is short, not a sentence and not code.
 NOT_HEADER = re.compile(r"[。、？！?!=(){}<>;\"'`]")
 ROW_VALUE = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|[•●＊*]{4,}|"
-                       r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9._-]*\d[A-Za-z0-9._-]*(?![A-Za-z0-9_@])")
+                       r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9._-]*\d[A-Za-z0-9._-]*(?![A-Za-z0-9_@])|"
+                       r"(?<![\d-])\d{3}-\d{4}(?![\d-])")                    # postal code
 HEADER_LINES, ROWS, ROW_WINDOW = 3, 2, 30
 
 
@@ -74,8 +83,8 @@ def columns(line):
 
 
 def account_list(text):
-    """A header with two of name/ID/password (on one line, or one label per line as OCR reads
-    table cells), then at least two lines with an ID, e-mail address or masked password."""
+    """A header with two column labels, one of them name, ID or password (on one line, or one
+    label per line as OCR reads table cells), then at least two lines with a value."""
     lines = text.splitlines()
     for i in range(len(lines)):
         found, end = set(), i
@@ -84,8 +93,8 @@ def account_list(text):
             if not labels: break
             found |= labels
             end = j
-        if len(found) < 2: continue
-        rows = sum(1 for line in lines[end + 1:end + 1 + ROW_WINDOW] if ROW_VALUE.search(line))
+        if len(found) < 2 or not found & PERSON: continue
+        rows = sum(1 for line in lines[end + 1:end + 1 + ROW_WINDOW] if ROW_VALUE.search(line) or phone(line) or ADDRESS.search(line))
         if rows >= ROWS: return True
     return False
 

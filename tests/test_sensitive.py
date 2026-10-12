@@ -94,6 +94,9 @@ def test_default_rules_exclude_contacts_and_checkout_pages_everywhere(settings):
     "No. アカウント 暗証番号 備考\n1 user001 ●●●●●● 管理者\n2 user002 ●●●●●● 一般",
     "氏名\nログインID\nパスワード\n山田 太郎\nyamada01\nAbc12345\n佐藤 花子\nsato02\nXyz67890",       # one cell per line
     "名前 メールアドレス\n山田 taro@example.com\n佐藤 hana@example.com",
+    "氏名 電話番号\n山田 太郎 090-0000-1111\n佐藤 花子 03-0000-2222",                               # phone column
+    "氏名 郵便番号 住所\n山田 太郎 100-0000 東京都千代田区架空1-2-3\n佐藤 花子 530-0000 大阪府大阪市北区架空4-5",
+    "Name\nPhone\nAddress\nTaro Example\n(03) 0000-1111\nHana Example\n(06) 0000-2222",          # one cell per line
 ])
 def test_account_lists_are_found(text):
     assert account_list(text)
@@ -107,6 +110,10 @@ def test_account_lists_are_found(text):
     "def login(username, password):\n    user1 = find(username)\n    key2 = hash(password)",     # code
     "パスワード\n\n" + "\n" * 40 + "ユーザーID\nuser01\nuser02",                                    # labels far apart
     "Name Size Modified\nreport1.pdf 2 MB\nslides2.key 5 MB",                                     # one column label
+    "郵便番号 住所\n100-0001 東京都千代田区千代田\n100-0002 東京都千代田区皇居外苑",              # postal-code lookup
+    "電話番号 住所\n03-0000-1111 東京都千代田区架空1-2-3\n06-0000-2222 大阪府大阪市北区架空4-5",  # no name, ID or password
+    "Name | IP address\nserver1 | 192.0.2.1\nserver2 | 192.0.2.2",                               # not a postal address
+    "電話番号\n03-0000-1111\nお問い合わせ時間 9:00〜17:00",                                       # contact page
 ])
 def test_other_screens_are_not_account_lists(text):
     assert not account_list(text)

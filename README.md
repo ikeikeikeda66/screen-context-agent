@@ -44,7 +44,7 @@ Screen history stays in the local encrypted store. Lookups require an approved c
 
 - **Per-client access**: each MCP client gets its own token and must be approved once in the app. You can list clients, see what each one read, and revoke any of them.
 - **Audit log**: every query, with the frames it returned, is recorded in the encrypted database. Only you can read it (CLI), never an assistant.
-- **Sensitive input is not stored**: card numbers, My Number and tables of accounts (name, ID, password columns) drop the whole frame; a name next to an address, phone number, date of birth or e-mail address is redacted. Contacts and checkout pages are excluded by default.
+- **Sensitive input is not stored**: card numbers, My Number and tables of accounts or people (name, ID, password, phone, postal code, address columns) drop the whole frame; a name next to an address, phone number, date of birth or e-mail address is redacted. Contacts and checkout pages are excluded by default.
 - **Data control**: purge by time, app or keyword; retention limits; usage report; full wipe; passphrase-protected backup and restore; export of a time range.
 
 Upgrading from 0.1 takes a few steps: see [Upgrading from 0.1](#upgrading-from-01).
@@ -253,7 +253,7 @@ Edit `policy.json` in the data folder. It is read again on every capture and eve
 | `ide_apps` | Hidden from the `standard` profile. |
 | `ai_output_apps`, `ai_output_title_patterns` | Frames showing an assistant's own output. Proposals cannot use them as evidence. |
 | `sensitive_detectors` | Default `card_number` (13–19 digits, issuer prefix, Luhn check) and `my_number` (12 digits with a valid check digit near a 個人番号/マイナンバー label). A frame that matches is dropped whole, text and image, before anything is stored; only the reason is counted. |
-| `sensitive_tables` | Default `account_list`: a table of accounts, such as a software's user list. A header row with at least two of name, ID (user ID, login ID, account, e-mail) and password columns, followed by at least two rows with an ID, e-mail address or masked password, drops the frame whole like `sensitive_detectors`. A login form has the labels but not the rows, so it is kept. |
+| `sensitive_tables` | Default `account_list`: a table of accounts or people, such as a software's user list. A header row with at least two of name, ID (user ID, login ID, account, e-mail), password, phone, postal code and address columns, one of them name, ID or password, followed by at least two rows with an ID, e-mail address, masked password, phone number, postal code or address, drops the frame whole like `sensitive_detectors`. A table of postal codes, or of phone numbers and addresses only, is a directory and is kept. A login form has the labels but not the rows, so it is kept. |
 | `sensitive_apps`, `sensitive_title_patterns`, `sensitive_url_patterns` | Default exclusions for the contacts app and for checkout and payment pages (by title or by a `/checkout`, `/payment` or `/billing` path in a visible URL). |
 | `pii_combinations` | Default `name+address`, `name+phone`, `name+dob`, `name+email`: signals within 5 OCR lines of each other (`name+phone:3` sets another window). Those lines become `[personal data]`, the rest of the frame stays searchable, and no preview image is stored. Names are found only through labels (氏名, お名前, フリガナ, `Name:`) and the 〇〇 様 form. |
 
