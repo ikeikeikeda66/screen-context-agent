@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import time
 import pytest
 from PIL import Image
 from test_core import settings, change
@@ -9,6 +10,8 @@ from screen_context import store
 from screen_context.capture import spool
 from screen_context.indexer import drain
 from screen_context.pii import parse, scan, signals
+from screen_context import pii
+from screen_context.pii import redact
 from screen_context.service import Service
 
 RULES = ["name+address", "name+phone", "name+dob", "name+email"]
@@ -100,3 +103,124 @@ def test_cli_pii_check(settings, tmp_path):
     out = json.loads(subprocess.run([sys.executable, "-m", "screen_context.cli", "pii-check", str(sample)], env=env, capture_output=True, check=True).stdout)
     assert out["drop_frame"] == "card_number" and out["combinations"] == ["name+address", "name+phone"]
     assert [r["line"] for r in out["redacted_lines"]] == [5, 6, 7]
+
+
+EMAIL_FRAME = ["Name: Taro Example", "taro.example@example-test.com", "unrelated line"]
+PHONE_FRAME = ["Name: Taro Example", "TEL 03-1234-5678", "unrelated line"]
+
+
+def hit(frame, extra, rules=RULES):
+    lines = frame + [extra]
+    return len(lines) - 1 in scan(lines, rules)[0]
+
+
+@pytest.mark.parametrize("extra", [
+    "example-test.com", "@example-test.com", "example-test", "Reply-To: example-test.com",
+    "<taro.example@example-test.com>", "taro.example@example-te", "taro.exam", "taro.example",
+    "EXAMPLE-TEST.COM", "Taro.Example@Example-Test.com", "example-t",
+])
+def test_email_fragments_are_redacted(extra):
+    assert hit(EMAIL_FRAME, extra)
+
+
+def test_unrelated_lines_stay_when_fragment_is_redacted():
+    assert scan(EMAIL_FRAME + ["example-test.com"], RULES)[0] == {0, 1, 3}
+
+
+@pytest.mark.parametrize("extra", ["example", "test.com", "info", "taro", "gmail.com", "2026-10-12", "¥12,345,678"])
+def test_short_or_common_text_stays(extra):
+    assert not hit(EMAIL_FRAME, extra)
+
+
+def test_public_mail_domains_are_not_fragments():
+    frame = ["Name: Taro Example", "taro.example@gmail.com"]
+    assert not hit(frame, "gmail.com")
+    assert not hit(frame, "Login with gmail.com")
+    assert not hit(frame, "@gmail.com")
+    assert hit(frame, "taro.example")
+    assert hit(frame, "taro.exam")
+
+
+@pytest.mark.parametrize("extra", ["1234-5678", "0312345678", "+81 3 1234 5678", "03-1234-5", "1234-567", "１２３４－５６７８"])
+def test_phone_fragments_are_redacted(extra):
+    assert hit(PHONE_FRAME, extra)
+
+
+@pytest.mark.parametrize("extra", ["(03) 1234", "03-1234", "2026-10-12", "¥12,345,678", "Order 87654321", "Order 5678"])
+def test_phone_lookalikes_stay(extra):
+    assert not hit(PHONE_FRAME, extra)
+
+
+def test_fragment_minimums_are_constants(monkeypatch):
+    assert not hit(EMAIL_FRAME, "taro.exa")  # 7 letters
+    assert not hit(PHONE_FRAME, "03-1234")
+    monkeypatch.setattr(pii, "MIN_EMAIL_FRAGMENT", 7)
+    monkeypatch.setattr(pii, "MIN_PHONE_DIGITS", 6)
+    assert hit(EMAIL_FRAME, "taro.exa")
+    assert hit(PHONE_FRAME, "03-1234")
+
+
+def test_fragments_do_nothing_without_a_matching_rule_or_rules():
+    assert scan(["taro.example@example-test.com", "example-test.com"], RULES) == (set(), [])
+    assert scan(EMAIL_FRAME + ["example-test.com"], []) == (set(), [])
+
+
+def test_fragments_match_outside_the_window():
+    assert hit(EMAIL_FRAME + ["filler"] * 8, "example-test.com")
+
+
+def test_redact_applies_fragments():
+    ocr = [{"text": text, "bbox": [0, 0, 1, 1]} for text in EMAIL_FRAME + ["example-test.com"]]
+    out, matched = redact(ocr, RULES, "X")
+    assert matched == ["name+email"]
+    assert [line["text"] for line in out] == ["X", "X", EMAIL_FRAME[2], "X"]
+    assert [line["bbox"] for line in out] == [None, None, [0, 0, 1, 1], None]
+
+
+def test_cli_pii_check_redacts_fragment_lines(settings, tmp_path):
+    sample = tmp_path / "sample.txt"
+    sample.write_text("\n".join(EMAIL_FRAME + ["example-test.com"]), encoding="utf-8")
+    env = {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin"}
+    out = json.loads(subprocess.run([sys.executable, "-m", "screen_context.cli", "pii-check", str(sample)], env=env, capture_output=True, check=True).stdout)
+    assert out["combinations"] == ["name+email"]
+    assert [r["line"] for r in out["redacted_lines"]] == [1, 2, 4]
+
+
+@pytest.mark.parametrize("frame, extra", [
+    (["Name: Taro Example", "customer-support@example-test.com"], "Customer reviews and ratings"),
+    (["Name: Taro Example", "taro@softwarehouse.example"], "Download the software update"),
+    (["Name: Taro Example", "taro.yamamoto@example-test.com"], "Meeting with Hanako Yamamoto"),
+    (["Name: Taro Example", "administrator@example-test.com"], "Contact the administrator for access"),
+    (["Name: Taro Example", "administrator@example-test.com"], "misinformation spreads"),
+    (["Name: Taro Example", "information@example-test.com"], "misinformation spreads"),
+])
+def test_common_words_next_to_a_fragment_stay(frame, extra):
+    assert not hit(frame, extra)
+
+
+@pytest.mark.parametrize("extra", ["hanako@example-test.com", "https://example-test.com/page", "see example-test.com/page"])
+def test_domain_inside_another_address_or_url_stays(extra):
+    # Eight lines after the name, so an address in the line is not redacted by the name+email rule itself.
+    assert not hit(EMAIL_FRAME + ["filler"] * 8, extra)
+
+
+@pytest.mark.parametrize("extra", ["example-test.com", "@example-test.com", "example-t"])
+def test_standalone_domain_is_redacted(extra):
+    assert hit(EMAIL_FRAME, extra)
+
+
+def test_fullwidth_address_fragments_are_compared_after_nfkc():
+    frame = ["Name: Taro Example", "ｔａｒｏ.ｅｘａｍｐｌｅ@example-test.com"]
+    assert scan(frame, RULES)[0] == {0, 1}
+    assert hit(frame, "taro.example")
+
+
+def test_invoice_number_matching_phone_digits_is_redacted_by_design():
+    assert hit(PHONE_FRAME, "Invoice 1234567")
+
+
+def test_long_digit_runs_scan_fast():
+    lines = PHONE_FRAME + [" ".join(["12"] * 2000)]
+    started = time.perf_counter()
+    scan(lines, RULES)
+    assert time.perf_counter() - started < 1

@@ -4,12 +4,14 @@ A name alone is kept; a name next to an address, phone number, date of birth or 
 address is what makes a leak harmful. When a rule's signals appear within a few OCR lines
 of each other, those lines are replaced with a placeholder and no preview image is kept.
 The rest of the frame (an e-mail body above a signature, for example) stays searchable.
+Other lines of the same frame that hold a sizeable fragment of a redacted e-mail address or phone number (a truncated second OCR reading) are redacted too (#55).
 
 Names cannot be recognised reliably by pattern, so NAME is found only through labels
 (氏名, お名前, フリガナ, "Name:") and the "〇〇 様" form. Unlabelled names, as in a
 contacts app, are handled by excluding the app (`sensitive_apps`).
 """
 import re
+import unicodedata
 
 CATEGORIES = ("name", "address", "phone", "dob", "email")
 DEFAULT_WINDOW = 5
@@ -30,6 +32,19 @@ PHONE_LABEL = re.compile(r"電話|携帯|TEL|Tel|tel|Phone|phone|FAX")
 DOB_LABEL = re.compile(r"生年月日|誕生日|(?i:date\s*of\s*birth|\bdob\b|birthday)")
 DATE = re.compile(r"\d{4}\s?[年/.-]\s?\d{1,2}\s?[月/.-]\s?\d{1,2}|(?:昭和|平成|令和|大正)\s?(?:\d{1,2}|元)\s?年\s?\d{1,2}\s?月\s?\d{1,2}")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# Fragments of a redacted value: OCR can return a second, truncated reading of the same line (#55).
+MIN_EMAIL_FRAGMENT = 8  # letters and digits a fragment of an e-mail address needs to be redacted too
+MIN_PHONE_DIGITS = 7  # digits a fragment of a phone number needs to be redacted too
+# The domain of these says nothing about the person, so it is never used as a fragment (the local part still is).
+PUBLIC_MAIL_DOMAINS = frozenset({
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.jp", "icloud.com", "me.com", "mac.com", "outlook.com",
+    "outlook.jp", "hotmail.com", "hotmail.co.jp", "live.com", "live.jp", "msn.com", "aol.com", "proton.me",
+    "protonmail.com", "docomo.ne.jp", "ezweb.ne.jp", "au.com", "softbank.ne.jp", "i.softbank.jp", "nifty.com", "biglobe.ne.jp"})
+# A local part like these is shared by many people, so only the rest of the address is a fragment.
+ROLE_LOCAL_PARTS = frozenset({"admin", "administrator", "info", "information", "support", "contact", "noreply", "no-reply",
+    "sales", "office", "hello", "help", "service", "webmaster", "postmaster", "team", "mail", "inquiry", "enquiries"})
+TOKEN = re.compile(r"[\w.+@-]+")
+DIGIT_RUN = re.compile(r"\d(?:[\d()\-]| (?=\d))*")
 
 
 def phone(line):
@@ -77,8 +92,100 @@ def parse(rules):
     return parsed
 
 
+def _alnum(text):
+    return re.sub(r"[\W_]+", "", text)
+
+
+def email_fragments(address):
+    """Casefolded parts of an address that identify it. values: the whole address and the local part (unless a role name);
+    domains: the domain and the domain without its TLD (none for a public mail service)."""
+    address = address.casefold()
+    local, _, domain = address.partition("@")
+    values = {address} | (set() if local in ROLE_LOCAL_PARTS else {local})
+    domains = set() if domain in PUBLIC_MAIL_DOMAINS else {domain, domain.rsplit(".", 1)[0]}
+    return values, domains
+
+
+def phone_numbers(line):
+    """Digits of each phone number in the line (as written, and in the domestic form without +81), when phone() accepts the line."""
+    if not phone(line): return set()
+    numbers = set()
+    for match in PHONE.finditer(line):
+        text = match.group()
+        digits = re.sub(r"\D", "", text)
+        domestic = digits[2:] if text.startswith("+81") else digits
+        if not domestic.startswith("0"): domestic = "0" + domestic
+        if len(domestic) in (10, 11): numbers |= {digits, domestic}
+    return numbers
+
+
+def _occurrences(low, text):
+    """Start indexes of text in low where it is not part of a longer word or address."""
+    return [m.start() for m in re.finditer(r"(?<![\w.+-])" + re.escape(text) + r"(?![\w-])", low)]
+
+
+def _standalone_domain(low, start, end):
+    """False when the domain at low[start:end] is part of another address (after "local@") or of a URL (next to "/")."""
+    before = low[max(0, start - 2):start]
+    # Labels after the piece belong to the same host: "example-test" in "example-test.com/" is followed by "/".
+    end = re.match(r"(?:\.[\w-]+)*", low[end:]).end() + end
+    if before.endswith("/") or low[end:end + 1] == "/": return False
+    return not re.search(r"[\w.+-]@$", before)
+
+
+def _email_hit(low, values, domains):
+    for f in values:
+        if len(_alnum(f)) >= MIN_EMAIL_FRAGMENT and _occurrences(low, f): return True
+    for f in domains:
+        if len(_alnum(f)) >= MIN_EMAIL_FRAGMENT and any(_standalone_domain(low, i, i + len(f)) for i in _occurrences(low, f)): return True
+    for match in TOKEN.finditer(low):
+        raw = match.group()
+        token = raw.strip(".-+@")
+        # Only a token with a separator or a digit is compared, so "customer" or "software" is never a piece of an address.
+        if len(_alnum(token)) < MIN_EMAIL_FRAGMENT or not re.search(r"[.\-+@\d]", token): continue
+        if "@" in token:
+            if any(token in f for f in values): return True
+        elif any(token in f for f in values if "@" not in f): return True
+        else:
+            start = match.start() + len(raw) - len(raw.lstrip(".-+@"))
+            if any(token in f for f in domains) and _standalone_domain(low, start, start + len(token)): return True
+    return False
+
+
+def _phone_hit(low, phones):
+    for run in DIGIT_RUN.findall(low):
+        groups = re.findall(r"\d+", run)
+        for a in range(len(groups)):
+            digits = ""
+            for b in range(a, len(groups)):
+                digits += groups[b]
+                # No phone number here has more than 13 digits, so a longer join cannot match.
+                if len(digits) > 13: break
+                if len(digits) >= MIN_PHONE_DIGITS and any(digits in number for number in phones): return True
+    return False
+
+
+def fragment_lines(lines, redacted):
+    """Indexes of other lines that hold a sizeable fragment of an e-mail address or phone number from a redacted line."""
+    values, domains, phones = set(), set(), set()
+    for i in redacted:
+        for match in EMAIL.finditer(unicodedata.normalize("NFKC", lines[i])):
+            address_values, address_domains = email_fragments(match.group())
+            values |= address_values
+            domains |= address_domains
+        phones |= phone_numbers(unicodedata.normalize("NFKC", lines[i]))
+    found = set()
+    for i, line in enumerate(lines):
+        if i in redacted: continue
+        low = unicodedata.normalize("NFKC", line).casefold()
+        hit = bool(values or domains) and _email_hit(low, values, domains)
+        if not hit and phones: hit = _phone_hit(low, phones)
+        if hit: found.add(i)
+    return found
+
+
 def scan(lines, rules):
-    """(line indexes to redact, sorted list of matched rule names)."""
+    """(line indexes to redact, sorted list of matched rule names). Lines holding a fragment of a redacted e-mail address or phone number go too."""
     found, redact, matched = signals(lines), set(), set()
     for parts, window in parse(rules):
         first, others = parts[0], parts[1:]
@@ -88,6 +195,7 @@ def scan(lines, rules):
                 redact.add(anchor)
                 for indexes in near.values(): redact |= indexes
                 matched.add("+".join(parts))
+    if redact: redact |= fragment_lines(lines, redact)
     return redact, sorted(matched)
 
 

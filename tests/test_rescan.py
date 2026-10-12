@@ -98,3 +98,68 @@ def test_cli_dry_run_then_apply(old_data):
     assert dry["applied"] is False and dry["frames"] == {"drop": 1, "redact": 1} and "--apply" in dry["next"]
     assert run("--apply")["applied"] is True
     assert run("--apply") == {"frames": {"drop": 0, "redact": 0}, "applied": False}
+
+
+# A mail whose email address is redacted with its line, but whose other lines still carry a fragment of it.
+FRAGMENT = ["来週の打ち合わせ資料を添付します。", "--", "山田 花子 様", "〒100-0001 東京都千代田区千代田1-1", "hanako.test@example-test.com",
+            "（以下余白）", "（以下余白）", "（以下余白）", "（以下余白）", "返信先 hanako.test@example-test.com", "宛先 hanako.test"]
+FRAGMENT_VALUE, FRAGMENT_KEEP = "hanako.test", "打ち合わせ資料"
+
+
+@pytest.fixture
+def fragment_data(settings):
+    change(settings, sensitive_detectors=[], pii_combinations=[])
+    record(settings, FRAGMENT)
+    change(settings, sensitive_detectors=DEFAULT_POLICY["sensitive_detectors"], pii_combinations=DEFAULT_POLICY["pii_combinations"])
+    return settings
+
+
+def only_frame(settings):
+    return next(iter(frames(settings).values()))
+
+
+def test_fragment_lines_match_the_indexer_and_leave_the_index(fragment_data, tmp_path):
+    fresh = Settings(tmp_path / "fresh", plaintext=True); store.initialize(fresh)
+    record(fresh, FRAGMENT)
+    reader = Service(fragment_data, "full", audit_path=None)
+    assert reader.search_screen_history(FRAGMENT_VALUE)["count"] == 1
+
+    rescan.apply(fragment_data, *rescan.scan(fragment_data))
+    old, new = frames(fragment_data), frames(fresh)
+    assert set(old) == set(new) == {FRAGMENT[0]}
+    for key in old:
+        assert old[key]["ocr_text"] == new[key]["ocr_text"]
+        assert FRAGMENT_VALUE not in old[key]["ocr_text"]
+        pattern = [line["bbox"] is None for line in json.loads(old[key]["ocr_json"])]
+        assert pattern == [line["bbox"] is None for line in json.loads(new[key]["ocr_json"])]
+        assert pattern[0] is False and [i for i, gone in enumerate(pattern) if gone] == [2, 3, 4, 9, 10]  # 9 and 10 are the fragments
+        assert old[key]["image_path"] is None and new[key]["image_path"] is None
+        assert old[key]["domains"] == new[key]["domains"]
+    assert reader.search_screen_history(FRAGMENT_VALUE)["count"] == 0
+    assert reader.search_screen_history(FRAGMENT_KEEP)["count"] == 1
+    with store.connect(fragment_data) as con: con.execute("INSERT INTO frames_fts(frames_fts) VALUES('integrity-check')")
+
+
+def test_fragment_cascade_rollups_outbox_audit_and_idempotence(fragment_data):
+    frame_id = only_frame(fragment_data)["id"]
+    with store.connect(fragment_data) as con:
+        con.execute("INSERT INTO runs VALUES ('r1','c',0,NULL,0,0,0,'p','open',NULL)")
+        con.execute("INSERT INTO notification_outbox VALUES ('o1','r1','k',0,'quote: hanako.test',?, 'unknown','sent',NULL)", (json.dumps([frame_id]),))
+    maintain(fragment_data)
+    with store.connect(fragment_data, readonly=True) as con:
+        assert FRAGMENT_VALUE in con.execute("SELECT payload FROM rollups").fetchone()[0]
+
+    rescan.apply(fragment_data, *rescan.scan(fragment_data))
+    with store.connect(fragment_data, readonly=True) as con:
+        assert FRAGMENT_VALUE not in con.execute("SELECT payload FROM rollups").fetchone()[0]
+        assert con.execute("SELECT body FROM notification_outbox").fetchone()[0] == "[purged]"
+    assert FRAGMENT_VALUE not in json.dumps(audit.rows(fragment_data))
+    assert rescan.scan(fragment_data) == ({}, {})  # nothing left to do
+
+
+def test_fragment_lines_are_redacted_without_ocr_json(fragment_data):
+    with store.connect(fragment_data) as con: con.execute("UPDATE frames SET ocr_json = NULL")
+    drops, redactions = rescan.scan(fragment_data)
+    assert len(redactions) == 1
+    rescan.apply(fragment_data, drops, redactions)
+    assert FRAGMENT_VALUE not in only_frame(fragment_data)["ocr_text"]
