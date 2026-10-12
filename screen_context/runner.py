@@ -11,6 +11,7 @@ from .activity import blocks
 from .health import NOT_CURRENT, health
 from .i18n import resolve, t
 from .privacy import denied
+from .service import InvalidArgument
 
 CONSUMER = "proposal"
 TEXT_BUDGET = 8000
@@ -37,7 +38,7 @@ def normalize(text):
 
 def _run(con, run_id):
     row = con.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
-    if row is None: raise ValueError("Unknown run")
+    if row is None: raise InvalidArgument("Unknown run")
     return dict(row)
 
 
@@ -104,24 +105,24 @@ def submit(settings, run_id, proposal, next_step, evidence, frame_ids, delivery=
     """Register one proposal. Rejects evidence that is not in the run's frames or is excluded now."""
     now = now or time.time()
     for name, value in (("proposal", proposal), ("next_step", next_step), ("evidence", evidence)):
-        if not isinstance(value, str) or not value.strip() or len(value) > 1000: raise ValueError(f"{name} must contain 1–1000 characters")
-    if not isinstance(frame_ids, list) or not frame_ids or len(frame_ids) > 50 or any(not isinstance(x, str) for x in frame_ids): raise ValueError("frame_ids must list 1–50 ids")
+        if not isinstance(value, str) or not value.strip() or len(value) > 1000: raise InvalidArgument(f"{name} must contain 1–1000 characters")
+    if not isinstance(frame_ids, list) or not frame_ids or len(frame_ids) > 50 or any(not isinstance(x, str) for x in frame_ids): raise InvalidArgument("frame_ids must list 1–50 ids")
     policy = settings.policy()
     with store.connect(settings) as con:
         run = _run(con, run_id)
-        if run["state"] != "handed_off": raise ValueError("Run is not open for proposals")
+        if run["state"] != "handed_off": raise InvalidArgument("Run is not open for proposals")
         allowed = set(json.loads(run["detail"]).get("frame_ids", []))
-        if not set(frame_ids) <= allowed: raise ValueError("frame_ids must come from this run")
+        if not set(frame_ids) <= allowed: raise InvalidArgument("frame_ids must come from this run")
         rows = [dict(r) for r in con.execute(f"SELECT * FROM frames WHERE id IN ({','.join('?'*len(frame_ids))})", frame_ids)]
-        if len(rows) != len(set(frame_ids)) or any(denied(policy, r, "full") for r in rows): raise ValueError("Evidence unavailable")
+        if len(rows) != len(set(frame_ids)) or any(denied(policy, r, "full") for r in rows): raise InvalidArgument("Evidence unavailable")
         # The quote must come from a frame that is not another AI's output (assistant apps, the agent's own channel),
         # so a proposal cannot rest only on what an assistant said.
         quote = normalize(evidence)
-        if len(quote) < EVIDENCE_MIN_CHARS: raise ValueError(f"evidence must quote at least {EVIDENCE_MIN_CHARS} characters of screen text")
+        if len(quote) < EVIDENCE_MIN_CHARS: raise InvalidArgument(f"evidence must quote at least {EVIDENCE_MIN_CHARS} characters of screen text")
         sources = [r for r in rows if not is_ai_output(r, policy) and quote in normalize(r["ocr_text"] + "\n" + r["window_title"])]
         if not sources:
-            if any(quote in normalize(r["ocr_text"] + "\n" + r["window_title"]) for r in rows): raise ValueError("Evidence must come from a non-AI screen")
-            raise ValueError("Evidence quote not found in referenced frames")
+            if any(quote in normalize(r["ocr_text"] + "\n" + r["window_title"]) for r in rows): raise InvalidArgument("Evidence must come from a non-AI screen")
+            raise InvalidArgument("Evidence quote not found in referenced frames")
         key = hashlib.sha256((run["consumer_id"] + "|" + normalize(proposal) + "|" + normalize(next_step)).encode()).hexdigest()
         dup = con.execute("SELECT o.created_at FROM notification_outbox o JOIN runs r ON r.run_id=o.run_id WHERE o.dedup_key=? AND r.consumer_id=?", (key, run["consumer_id"])).fetchone()
         if dup and dup["created_at"] > now - SUPPRESS_SECONDS:

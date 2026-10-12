@@ -12,10 +12,14 @@ from .privacy import denied, envelope
 from .crypto import get_key, unseal
 
 
+class InvalidArgument(ValueError):
+    """A tool argument the caller can fix. The MCP layer returns its text to the client (#69)."""
+
+
 def bounded(value, low, high, name):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low <= value <= high:
-        raise ValueError(f"{name} must be between {low} and {high}")
-    if name != "ts" and not isinstance(value, int): raise ValueError(f"{name} must be an integer")
+        raise InvalidArgument(f"{name} must be between {low} and {high}")
+    if name != "ts" and not isinstance(value, int): raise InvalidArgument(f"{name} must be an integer")
     return value
 
 
@@ -37,8 +41,12 @@ def profile_name(value):
 
 
 def day_range(day):
-    start = datetime.strptime(day, "%Y-%m-%d")
-    return start.timestamp(), (start + timedelta(days=1)).timestamp()
+    try:
+        start = datetime.strptime(day, "%Y-%m-%d")
+        if start.strftime("%Y-%m-%d") != day: raise ValueError(day)
+        return start.timestamp(), (start + timedelta(days=1)).timestamp()
+    except (ValueError, OverflowError, OSError, TypeError):
+        raise InvalidArgument("date must use YYYY-MM-DD") from None
 
 
 class Service:
@@ -90,7 +98,7 @@ class Service:
         return envelope(out, tool=tool, profile=self.profile)
 
     def search_screen_history(self, query: str, limit: int = 10, since_minutes: int | None = None):
-        if not isinstance(query, str) or not query.strip() or len(query) > 500: raise ValueError("query must contain 1–500 characters")
+        if not isinstance(query, str) or not query.strip() or len(query) > 500: raise InvalidArgument("query must contain 1–500 characters")
         bounded(limit, 1, 50, "limit")
         since = 0 if since_minutes is None else time.time() - bounded(since_minutes, 1, 5256000, "since_minutes") * 60
         rows = self.rows(since, query=query.strip())
@@ -114,8 +122,8 @@ class Service:
         Nothing outside the range is read, so a caller that holds a time range (for example one from
         ActivityWatch, #66) gets no screen text from outside it."""
         bounded(start, 0, 32503680000, "ts"); bounded(end, 0, 32503680000, "ts"); bounded(limit, 1, 50, "limit")
-        if not start < end: raise ValueError("start must be before end")
-        if end - start > 7 * 86400: raise ValueError("the range must be 7 days or shorter")
+        if not start < end: raise InvalidArgument("start must be before end")
+        if end - start > 7 * 86400: raise InvalidArgument("the range must be 7 days or shorter")
         recs = blocks(self.rows(start, end))
         page = recs[:limit]
         return {**self.finish(page, "get_activity_between", {"start": start, "end": end, "limit": limit}),
@@ -170,19 +178,21 @@ class Service:
         from .runner import policy_revision
 
         if not isinstance(date, str) or len(date) != 10:
-            raise ValueError("date must use YYYY-MM-DD")
+            raise InvalidArgument("date must use YYYY-MM-DD")
         try:
             day = calendar_date.fromisoformat(date)
             if day.isoformat() != date: raise ValueError
             zone = ZoneInfo(timezone)
         except (ValueError, ZoneInfoNotFoundError, TypeError):
-            raise ValueError("date or timezone is invalid") from None
+            raise InvalidArgument("date or timezone is invalid") from None
         if purpose not in ("report", "diary"):
-            raise ValueError("purpose must be report or diary")
+            raise InvalidArgument("purpose must be report or diary")
         bounded(limit, 1, 10, "limit")
 
-        start = datetime.combine(day, day_time.min, zone).timestamp()
-        end = datetime.combine(calendar_date.fromordinal(day.toordinal()+1), day_time.min, zone).timestamp()
+        try:
+            start = datetime.combine(day, day_time.min, zone).timestamp()
+            end = datetime.combine(calendar_date.fromordinal(day.toordinal()+1), day_time.min, zone).timestamp()
+        except (ValueError, OverflowError, OSError): raise InvalidArgument("date or timezone is invalid") from None
         policy = self.settings.policy()
         revision = policy_revision(policy)
         if cursor is None:
@@ -195,7 +205,7 @@ class Service:
                     state.get("timezone") != timezone or state.get("purpose") != purpose or
                     state.get("policy") != revision or type(state.get("snapshot")) is not int or
                     type(state.get("seq")) is not int or state["seq"] > state["snapshot"]):
-                raise ValueError("CURSOR_EXPIRED: cursor does not match this request or current policy")
+                raise InvalidArgument("CURSOR_EXPIRED: cursor does not match this request or current policy")
             snapshot, seq = state["snapshot"], state["seq"]
 
         records, last = [], seq
@@ -263,7 +273,7 @@ class Service:
             payload = json.loads(raw)
             if payload.get("profile") != self.profile: raise ValueError
             return payload
-        except Exception: raise ValueError("CURSOR_EXPIRED: cursor is invalid for this profile")
+        except Exception: raise InvalidArgument("CURSOR_EXPIRED: cursor is invalid for this profile")
 
     def get_activity_delta(self, cursor: str | None = None, limit: int = 20, since_minutes: int = 60):
         """Frames in OCR-completion order after the cursor; late OCR is never skipped."""
@@ -277,7 +287,7 @@ class Service:
                 seq = con.execute("SELECT coalesce(min(seq),?)-1 FROM indexed_events WHERE indexed_at>=?", (snapshot + 1, time.time() - since_minutes * 60)).fetchone()[0]
             else:
                 state = self.decode_cursor(cursor)
-                if state.get("policy") != revision: raise ValueError("POLICY_CHANGED: restart without a cursor")
+                if state.get("policy") != revision: raise InvalidArgument("POLICY_CHANGED: restart without a cursor")
                 seq, snapshot = state["seq"], state["snapshot"]
             rows, last, has_more = [], seq, False
             for r in con.execute("SELECT f.*, e.seq, e.indexed_at FROM indexed_events e JOIN frames f ON f.id=e.frame_id WHERE e.seq>? AND e.seq<=? ORDER BY e.seq", (seq, snapshot)):
@@ -297,20 +307,20 @@ class Service:
         """Register a proposal for the open run. Duplicate conclusions within 24h are suppressed; evidence must be a quote from the referenced frames."""
         self.require_full()
         from .runner import submit
-        if not isinstance(run_id, str) or len(run_id) > 64: raise ValueError("Invalid run_id")
+        if not isinstance(run_id, str) or len(run_id) > 64: raise InvalidArgument("Invalid run_id")
         result = submit(self.settings, run_id, proposal, next_step, evidence, frame_ids)
         self.finish([{"frame_id": f} for f in frame_ids], "submit_proposal", {"run_id": run_id, "decision": result["decision"]})
         return {"schema_version": 1, "status": "ok", **result}
 
     def get_snapshot_image(self, frame_id: str):
         self.require_full()
-        if not isinstance(frame_id, str) or len(frame_id) > 64: raise ValueError("Invalid frame ID")
+        if not isinstance(frame_id, str) or len(frame_id) > 64: raise InvalidArgument("Invalid frame ID")
         policy = self.settings.policy()
         with store.connect(self.settings, readonly=True) as con:
             row = con.execute("SELECT * FROM frames WHERE id=?", (frame_id,)).fetchone()
         if row is None or denied(policy, dict(row), self.profile) or not row["image_path"] or row["ts"] < self.settings.preview_cutoff(time.time()):
             self.finish([], "get_snapshot_image", {"frame_id": frame_id})
-            raise ValueError("Snapshot unavailable")
+            raise InvalidArgument("Snapshot unavailable")
         path = (self.settings.root / "images" / row["image_path"]).resolve()
         if path.parent != (self.settings.root / "images").resolve(): raise ValueError("Invalid image path")
         data = path.read_bytes()
