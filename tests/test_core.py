@@ -242,3 +242,14 @@ def test_valid_daily_rollup_date_succeeds(settings):
     from screen_context.mcp_server import create_server
     server = create_server(settings, "full", authorize=lambda: "tester")
     asyncio.run(server.call_tool("get_daily_rollup", {"date": "2026-09-12"}))
+
+
+@pytest.mark.parametrize("command", [["push", "2026-9-1"], ["export", "2026-9-1"], ["diary-material", "2026-9-1"]])
+def test_cli_rejects_a_malformed_date_without_a_traceback(settings, command):
+    import os, subprocess, sys
+    env = {"SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "PATH": "/usr/bin:/bin",
+           "SystemRoot": os.environ.get("SystemRoot", "")}
+    done = subprocess.run([sys.executable, "-m", "screen_context.cli", *command], env=env, capture_output=True,
+                          text=True, encoding="utf-8", timeout=30, stdin=subprocess.DEVNULL)
+    assert done.returncode == 2 and "date must use YYYY-MM-DD" in done.stderr and "Traceback" not in done.stderr
+    assert not (settings.root / "exports" / "2026-9-1.json").exists()

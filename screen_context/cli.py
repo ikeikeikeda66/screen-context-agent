@@ -4,7 +4,7 @@ import signal
 import sys
 import threading
 from .config import Settings
-from .service import PROFILES, PROFILE_ALIASES
+from .service import PROFILES, PROFILE_ALIASES, InvalidArgument, day_range
 
 
 def main():
@@ -84,7 +84,8 @@ def main():
         result = health(settings)
     elif args.command == "diary-material":
         from .material import diary_markdown
-        print(diary_markdown(settings, args.date, args.budget, lang=args.lang)); return
+        try: print(diary_markdown(settings, args.date, args.budget, lang=args.lang)); return
+        except InvalidArgument as error: parser.error(str(error))
     elif args.command == "proposal":
         from . import runner
         if args.action == "finish":
@@ -243,6 +244,9 @@ def main():
         run(settings, open_browser=not args.no_browser); return
     else:
         from . import viking
+        if args.command == "push" or args.date:
+            try: day_range(args.date)  # reject a malformed DATE before any export or upload (#69)
+            except InvalidArgument as error: parser.error(str(error))
         if args.command == "push": result = viking.push(settings, args.date)
         elif args.date:
             print("export DATE is deprecated and will be removed: use export --from DATE --to NEXT_DAY --format viking", file=sys.stderr)
