@@ -32,7 +32,7 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 | macOS 14 以降 | 対応。利用する Mac 上でメニューバーアプリをビルドします。公証済みアプリや、そのまま使えるインストーラーはありません。[macOS の手順](#はじめかたmacos) |
 | Windows 10/11 x64 | 対応。ソースから操作ウィンドウを起動するか、Windows 上でポータブル版をビルドします。Windows 11 23H2 で実機確認済みです。[Windows のセットアップ](#windows-のセットアップ) |
 
-アプリ（撮影と indexer を実行します）を起動したら、`screen-context mcp-config --client <name>` でクライアント設定を出力します。対応クライアント名と設定先は [MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。初回利用時に ScreenContext アプリでクライアントを承認します。接続後は、たとえば「さっきブラウザで見ていたエラーを探して」とアシスタントに頼めます。
+アプリを起動すると、初回は画面収録の許可を案内し、暗号化ストアを作成して、この Mac で見つかった AI アシスタントへの接続を提案します。それ以外のクライアントは `screen-context mcp-config --client <name>` で設定します。対応クライアント名と設定先は [MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。初回利用時に ScreenContext アプリでクライアントを承認します。接続後は、たとえば「さっきブラウザで見ていたエラーを探して」とアシスタントに頼めます。
 
 画面履歴は暗号化したローカルストアに保存します。承認済みクライアントだけが検索でき、アクセス状況の確認や失効もできます。一方、OCR は文字を読み違えることがあり、機微な画面をすべて除外できるわけではありません。撮影を有効にする前に[記録する内容](#記録する内容)と[既知の制限](#既知の制限)を確認してください。
 
@@ -65,7 +65,7 @@ ScreenContext は前面ウィンドウを記録し、OS 内蔵の OCR で文字�
 
 ## はじめかた（macOS）
 
-**1. インストールと暗号化ストアの作成**
+**1. インストール**
 
 ```sh
 git clone https://github.com/ikeikeikeda66/screen-context-agent.git
@@ -74,7 +74,7 @@ uv sync --locked --extra macos --extra encrypted --extra dev
 .venv/bin/screen-context init
 ```
 
-`init` は `~/Library/Application Support/ScreenContext` を作成し、ランダムな暗号鍵を macOS のキーチェーンに保存します。鍵を失うと履歴を復号できません。`screen-context backup` でパスフレーズ付きの控えを作れます。
+`init` は `~/Library/Application Support/ScreenContext` を作成し、ランダムな暗号鍵を macOS のキーチェーンに保存します。アプリも初回起動時に同じことをするため、アプリより先にコマンドラインを使う場合だけ `init` が必要です。鍵を失うと履歴を復号できません。`screen-context backup` でパスフレーズ付きの控えを作れます。
 
 **2. メニューバーアプリのビルド・署名・起動**
 
@@ -86,7 +86,13 @@ SCREEN_CONTEXT_SIGN_IDENTITY="ScreenContext Local Signing" sh packaging/build_ma
 open dist/ScreenContext.app
 ```
 
-システム設定 > プライバシーとセキュリティ > 画面収録で ScreenContext を許可し、アプリを開き直してください。アプリは撮影と indexer（OCR）の両方を実行し、indexer が動いているかをメニューに表示します。メニューの「**ログイン時に起動**」をオンにすると、Mac の起動時に自動で開きます。再ビルドの後、`codesign` が署名用の鍵を使ってよいか一度だけ確認されることがあります。「常に許可」を選んでください。
+アプリは撮影と indexer（OCR）の両方を実行し、indexer が動いているかをメニューに表示します。初回起動では次の3段階を案内し、撮影は最後の段階が終わってから始まります。
+
+1. **画面収録**：macOS がまだ許可していない場合、システム設定 > プライバシーとセキュリティ > 画面収録で ScreenContext をオンにするよう案内して終了します。変更はアプリを開き直すまで反映されないため、もう一度開いてください。
+2. **暗号化ストア**：鍵とデータベースを作成します。
+3. **AI アシスタント**：見つかった対応アシスタント（Claude Desktop・Cursor・VS Code・Gemini CLI・Codex CLI）を、すべてオフの状態で一覧にします。接続するものにチェックを入れるか、スキップします。ファイルはバックアップします。
+
+途中で止めた場合は、次の起動で続きから再開します。すでにデータベースがある環境には再び尋ねません。Mac の起動時に自動で開くには、メニューの「**ログイン時に起動**」をオンにします。再ビルドの後、`codesign` が署名用の鍵を使ってよいか一度だけ確認されることがあります。「常に許可」を選んでください。
 
 - Developer ID の署名でも同じように使えます。`SCREEN_CONTEXT_SIGN_IDENTITY=-`（アドホック署名）でもビルドできますが、再ビルドのたびに権限を付け直す必要があります。
 - アプリは公証（notarization）を受けていません。使う Mac の上でビルドしてください。他の Mac からダウンロード・コピーしたアプリは Gatekeeper に止められます。
@@ -94,7 +100,9 @@ open dist/ScreenContext.app
 - アプリを使わずに indexer だけを動かす場合（撮影済みの画面を OCR するときなど）は、ターミナルで `.venv/bin/screen-context index --watch` を実行します。indexer は1つしか動かせないため、アプリを開いている間は実行しないでください。
 - 以前のバージョンで indexer の LaunchAgent を登録していた場合、アプリの初回起動時に削除を提案します。詳しくは [packaging/macos/README.md](packaging/macos/README.md)（英語）を参照してください。
 
-**3. アシスタントの接続**：[MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。
+**3. アシスタントの接続**：上の案内で、見つかったアシスタントはすでに提案済みです。あとからインストールしたものを接続するには、メニューの「**AIアシスタントを接続…**」を選びます。Claude Code・Windsurf などはターミナルで追加します。[MCP クライアントの接続](#mcp-クライアントの接続)を参照してください。
+
+ビルドしたアプリには、コマンドライン用の `ScreenContext.app/Contents/MacOS/screen-context` も入っています。チェックアウトからインストールしていない場合に、この README の `screen-context` コマンドとして使えます。これは常にコマンドラインとして動き（引数なしではヘルプを表示）、メニューバーアプリは起動しません。
 
 ### メニューバー
 
@@ -107,6 +115,8 @@ open dist/ScreenContext.app
 - **言語**: システムの設定に従う / English / 日本語。メニュー、ダイアログ、生成する素材の文言がすべてこの設定に従います。
 - **Today を開く…**: Touch ID（またはログインパスワード）で確認してから、[Today ビュー](#today-ビュー)をブラウザで開きます。
 - **直近の記録を削除**: 直近5分・15分・1時間。うっかり記録してしまったときに使います。削除する件数（すでに受け取ったアシスタントがあればその名前も）を表示し、確認してから削除します。その時間内で OCR 待ちの画像も削除します。取り消しはできません。
+- **AIアシスタントを接続…**: インストール済みの AI アシスタントをもう一度（すべてオフの状態で）提案し、チェックしたものに項目を追加します。
+- **ScreenContext をアンインストール…**: [アンインストール](#アンインストール)を参照してください。
 
 ## Today ビュー
 
@@ -128,7 +138,7 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 
 ## MCP クライアントの接続
 
-使っているクライアント用の設定を出力します。
+使っているクライアント用の設定を出力します。チェックアウトからは `.venv/bin/screen-context`、ビルドしたアプリからは `ScreenContext.app/Contents/MacOS/screen-context` を使います：
 
 ```sh
 .venv/bin/screen-context mcp-config --client claude-code     # `claude mcp add` コマンドを出力
@@ -274,13 +284,47 @@ MCP の結果にはアプリ名・時刻と `source=observed_screen`、`trust=un
 | アシスタントが読んだものを見る | `audit list [--client NAME]`、`audit export` | クライアント、時刻、ツール、検索語、引数、返したフレーム ID。MCP では公開しません。`audit export` は平文の JSON Lines を出力し、出力したこと自体も記録します。 |
 | データを取り出す | `export --from T [--to T] --format jsonl\|md\|csv\|viking` | ポリシーを適用します。IDE の画面は `--exclude-ide` を付けない限り含めます。既存のファイルは上書きしません。含めたフレームの ID を監査記録に残すので、後の `purge` で「コピーが外にある」と警告します。管理者は禁止できます（`export_allowed`）。 |
 | 別の PC に移す | `backup FILE`、移行先で `restore FILE [--replace]` | DB の一貫したスナップショット、プレビュー、設定を、暗号化したまま 1 つのアーカイブにまとめ、データの鍵をパスフレーズで包んで同梱します（scrypt、AES-GCM）。`restore` は何かを書き込む前にパスフレーズを確認します。パスフレーズがないとアーカイブは開けません。 |
-| すべて消す | `wipe`（`ERASE` と入力） | まず資格情報ストアから鍵を削除して暗号化ファイルをすべて読めなくし、そのあとデータフォルダを削除します。実行前にキャプチャと indexer を終了してください。バックアップはパスフレーズがあれば引き続き復元できます。 |
+| すべて消す | `wipe`（`ERASE` と入力） | まず資格情報ストアから鍵を削除して暗号化ファイルをすべて読めなくし、そのあとデータフォルダを削除します。実行前にキャプチャと indexer を終了してください。バックアップはパスフレーズがあれば引き続き復元できます。AI クライアントと Login Items からも外すには、[`uninstall --wipe`](#アンインストール) を使います。 |
 
 保存の詳細：
 
 - スプールとプレビュー画像は AES-GCM、データベースと全文索引は SQLCipher で暗号化します。鍵は OS の資格情報保管庫（キーチェーン / Windows 資格情報マネージャー）、またはヘッドレス環境では `SCREEN_CONTEXT_KEY` に置きます。
 - スプールは 100 枚または 512 MB で受け付けを止めます。24 時間以上処理されない画像は `maintain` で削除します。
 - `SCREEN_CONTEXT_PLAINTEXT=1` は開発時のテスト専用です。暗号化が使えないときに自動で平文へ切り替えることはありません。
+
+## アンインストール
+
+メニューバーの「**ScreenContext をアンインストール…**」、またはターミナルの `screen-context uninstall` を使います。どちらも、変更される内容と残る内容を表示し、確認するまでは何も変更しません。メニューでは「キャンセル」が既定のボタンです。キャンセルを選ぶか、Return・Esc を押せば何も変わりません。ターミナルでは、確認の語（`UNINSTALL`。`--wipe` のときは `ERASE`）以外を入力すると何も変わりません。
+
+取り除くもの：
+
+- Claude Desktop・Cursor・VS Code・Gemini CLI・Codex CLI の設定ファイルにある `screen-context` の項目。ファイルは先にバックアップし（`<ファイル>.screen-context-YYYYmmdd-HHMMSS.bak`）、ほかのサーバーはそのまま残します。別のデータフォルダを指す項目は残します。
+- すべてのクライアントのトークン（`screen-context clients list` で失効と表示されます）。
+- 「ログイン時に起動」と、以前のバージョンの indexer 用 LaunchAgent（停止し、ファイル名を `.disabled` に変えます）。
+- ログフォルダ `~/Library/Logs/ScreenContext`。indexer の標準出力と標準エラーだけが入っており、画面の文字は含みません。
+
+しないこと：
+
+- **履歴と暗号鍵は残ります**（データフォルダ）。再インストールすると再び使えます。キーチェーンの鍵と、データフォルダ全体（中の `exports` フォルダを含む）まで消すには、メニューの 2 番目の確認ダイアログで「データを消去…」を選ぶか、ターミナルで `--wipe` を付けます。取り消せません。
+- ScreenContext アプリ本体。ゴミ箱へは自分で移してください。
+- データフォルダの外に保存したバックアップとエクスポート。バックアップはパスフレーズで復元できます。
+- `mcp-config --name` で付けた名前など、別名の項目のうち ScreenContext のものに見えるもの。`--dry-run` の JSON では `remains` に `code: related` として出ます（確認画面では「残るもの」）。取り除くには `--include 名前` を付けます。
+- Claude Code・Windsurf など、ScreenContext が編集できないクライアント。確認画面にそれぞれのコマンドや設定ファイルを表示します（例：`claude mcp remove screen-context --scope user`）。
+- ソースから実行している場合の「ログイン時に起動」（自分のログイン項目を外せるのはアプリだけです）。システム設定 > 一般 > ログイン項目を開き、ScreenContext を外してください。
+
+メニューから使う場合：アプリが確認ダイアログを出し（既定のボタンは「キャンセル」）、続いてデータを残すか消去するかを尋ねます。消去を選ぶと `ERASE` の入力が必要です。確認後、アプリは撮影と indexer を止めて手順を実行し、結果を表示して終了します。
+
+ターミナルから使う場合：
+
+```sh
+screen-context uninstall --dry-run              # 計画を JSON で表示するだけ（何も変更しません）
+screen-context uninstall                        # UNINSTALL と入力して確認
+screen-context uninstall --wipe                 # 鍵とデータもすべて消去。ERASE と入力
+screen-context uninstall --include NAME         # --dry-run に出た別名の項目も取り除く（複数回指定可）
+screen-context uninstall --confirm UNINSTALL    # 入力を省略（--wipe のときは ERASE）
+```
+
+ターミナルから実行するときは、先に ScreenContext アプリを終了してください。撮影や indexer が動いていると、何も変更しません。ある手順が失敗しても残りは実行し、終了コード 1 で、どの手順が失敗したかを出力します。もう一度実行すれば再試行できます。
 
 ## 脅威モデル
 
@@ -352,7 +396,7 @@ screen-context review [--days N] [--format md]  調整用の利用状況レポ�
 
 # MCP クライアント
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME] [--write [--dry-run] [--force]]
 screen-context clients list | approve NAME | revoke NAME
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 
@@ -366,6 +410,7 @@ screen-context pii-scan [--apply]       過去の記録にルールを適用す�
 screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
 screen-context backup FILE | restore FILE [--replace]   パスフレーズで保護したアーカイブ
 screen-context wipe                     鍵を削除してから全データを削除（取り消し不可）
+screen-context uninstall [--wipe] [--include NAME] [--dry-run] [--confirm WORD]   AI クライアント・ログイン項目・launchd から ScreenContext を外す
 
 # 任意機能
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
