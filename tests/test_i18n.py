@@ -127,3 +127,12 @@ def test_schema_messages_name_the_fix_in_both_languages():
         if lang == "ja":
             assert "screen-context backup" in old and "screen-context init" in old
             assert "backup" not in new and "更新" in new
+
+
+def test_frozen_macos_cli_is_the_screen_context_link_next_to_the_app(monkeypatch):
+    # The app launcher is never used as the CLI; Contents/MacOS/screen-context runs mac_main.py as the CLI (#35).
+    from screen_context import clients
+    monkeypatch.setattr(sys, "frozen", "macosx_app", raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", "/Applications/ScreenContext.app/Contents/MacOS/python")
+    assert clients.cli_command() == ["/Applications/ScreenContext.app/Contents/MacOS/screen-context"]
