@@ -7,6 +7,8 @@ set -eu
 cd packaging
 ../.venv/bin/python setup_mac.py py2app --dist-dir ../dist --bdist-base ../build
 APP=../dist/ScreenContext.app
+# screen-context is a relative link to the launcher; mac_main.py picks the CLI from its name (never the menu bar app).
+ln -sfn ScreenContext "$APP/Contents/MacOS/screen-context"
 # --deep does not re-sign the loose Python extension modules in Resources. Under the hardened
 # runtime, one left with py2app's ad hoc signature is killed at its first page-in (#7), so sign
 # every nested binary first, then seal the bundle.

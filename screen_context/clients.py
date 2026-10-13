@@ -22,8 +22,8 @@ def cli_command():
     """Command that starts this installation's CLI."""
     if getattr(sys, "frozen", False):
         if sys.platform == "darwin":
-            # py2app: sys.executable is Contents/MacOS/python; the app launcher runs the CLI when given arguments.
-            return [str(Path(sys.executable).parent / "ScreenContext")]
+            # py2app: sys.executable is Contents/MacOS/python. This link to the launcher always runs the CLI (packaging/mac_main.py), never the menu bar app.
+            return [str(Path(sys.executable).parent / "screen-context")]
         return [sys.executable]
     return [sys.executable, "-m", "screen_context.cli"]
 

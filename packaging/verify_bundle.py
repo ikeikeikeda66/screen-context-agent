@@ -1,5 +1,6 @@
 """Verify the frozen app without requesting screen access or opening a GUI."""
 from pathlib import Path
+import json
 import os
 import subprocess
 import tempfile
@@ -36,6 +37,13 @@ with tempfile.TemporaryDirectory(prefix="screen-context-bundle-") as directory:
     subprocess.run([str(python), "-I", "-S", "-c", probe, str(resources)], env=env, cwd=directory, check=True, timeout=30)
     for args in (("--help",), ("status",)):
         subprocess.run([str(application), *args], env=env, cwd=directory, check=True, timeout=20)
+    # The CLI link: relative, next to the launcher; no arguments shows usage and exits; mcp-config points at it.
+    link = bundle / "Contents/MacOS/screen-context"
+    assert os.readlink(link) == "ScreenContext"
+    usage = subprocess.run([str(link)], env=env, cwd=directory, check=True, timeout=20, capture_output=True, text=True)
+    assert "usage" in (usage.stdout + usage.stderr).lower()
+    config = json.loads(subprocess.run([str(link), "mcp-config", "--client", "generic"], env=env, cwd=directory, check=True, timeout=20, capture_output=True, text=True).stdout)
+    assert os.path.samefile(config["mcpServers"]["screen-context"]["command"], link)
     assert not (Path(directory)/"history.db").read_bytes().startswith(b"SQLite format")
 assert not list(bundle.rglob("Tk.framework"))
 subprocess.run(["codesign", "--verify", "--deep", "--strict", str(bundle)], check=True)
