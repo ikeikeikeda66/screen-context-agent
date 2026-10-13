@@ -44,9 +44,10 @@ def workers_stopped(settings):
     return stack
 
 
-def wipe(settings):
+def wipe(settings, locks=None):
+    """`locks`: the result of workers_stopped() when the caller already holds both locks (uninstall)."""
     if not settings.root.exists(): raise FileNotFoundError(f"No data folder at {settings.root}")
-    with workers_stopped(settings):
+    with (locks if locks is not None else workers_stopped(settings)):
         key_deleted = False if settings.plaintext else delete_key(settings)
         for path in settings.root.iterdir():
             if path.name in ("capture.lock", "indexer.lock"): continue  # still held; removed below
