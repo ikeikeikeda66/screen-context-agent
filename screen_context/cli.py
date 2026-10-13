@@ -41,6 +41,11 @@ def _main():
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
     wipe = sub.add_parser("wipe", help="Delete the key, then the whole data folder (no undo)")
     wipe.add_argument("--confirm", help="type ERASE to skip the prompt")
+    uninstall_cmd = sub.add_parser("uninstall", help="Remove ScreenContext from AI clients, Login Items and launchd; --wipe also erases the data")
+    uninstall_cmd.add_argument("--wipe", action="store_true", help="also delete the key and the whole data folder (no undo)")
+    uninstall_cmd.add_argument("--include", action="append", default=[], metavar="NAME", help="also remove this related entry listed by --dry-run (repeat for more)")
+    uninstall_cmd.add_argument("--dry-run", action="store_true", help="show what would happen and change nothing")
+    uninstall_cmd.add_argument("--confirm", help="type UNINSTALL (ERASE with --wipe) to skip the prompt")
     for cmd in ("backup", "restore"):
         p = sub.add_parser(cmd, help="Encrypted archive protected by a passphrase" if cmd == "backup" else "Restore an archive made by backup")
         p.add_argument("file"); p.add_argument("--passphrase-file", help="read the passphrase from this file (for scripts)")
@@ -113,6 +118,22 @@ def _main():
         try: result = lifecycle.wipe(settings)
         except store.SchemaMismatch: raise
         except (RuntimeError, FileNotFoundError) as error: parser.error(str(error))
+    elif args.command == "uninstall":
+        from . import uninstall
+        from .i18n import t
+        try: plan = uninstall.plan(settings, wipe=args.wipe, include_related=args.include)
+        except ValueError as error: parser.error(str(error))
+        if args.dry_run: result = uninstall.describe(plan)
+        else:
+            word = uninstall.confirmation_word(plan)
+            title, body = uninstall.confirmation(plan)
+            print(title + "\n\n" + body, file=sys.stderr)
+            try: answer = args.confirm or input(t("uninstall.prompt", "en", word=word))
+            except EOFError: parser.error("not confirmed; nothing was changed")     # no terminal input (stdin closed)
+            if answer != word: parser.error("not confirmed; nothing was changed")
+            done = uninstall.apply(plan)
+            result = {"ok": done.ok, "message": uninstall.result_message(done), "steps": done.steps, "manual": done.manual, "wiped": done.wiped}
+            if not done.ok: print(json.dumps(result, ensure_ascii=False)); sys.exit(1)
     elif args.command in ("backup", "restore"):
         from pathlib import Path
         from getpass import getpass
