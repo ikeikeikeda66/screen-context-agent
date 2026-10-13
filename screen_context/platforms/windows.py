@@ -4,7 +4,94 @@ import ctypes
 from ctypes import wintypes
 import inspect
 import threading
+import uuid
 from PIL import Image
+
+CLSCTX_INPROC_SERVER = 0x1
+COINIT_MULTITHREADED = 0x0
+S_OK, S_FALSE, RPC_E_CHANGED_MODE = 0x0, 0x1, 0x80010106
+# Slot numbers in the vtable, counted from IUnknown (QueryInterface 0, AddRef 1, Release 2).
+VTABLE_RELEASE = 2
+VTABLE_GET_FOCUSED_ELEMENT = 8     # IUIAutomation::GetFocusedElement
+VTABLE_GET_CURRENT_IS_PASSWORD = 35  # IUIAutomationElement::get_CurrentIsPassword
+CLSID_CUIAUTOMATION = "ff48dba4-60ef-4201-aa87-54103eef594e"
+IID_IUIAUTOMATION = "30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"
+
+
+class UiaError(OSError):
+    """UI Automation could not answer. Capture treats an exception from the check as Secure Input on."""
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [("Data1", ctypes.c_uint32), ("Data2", ctypes.c_uint16), ("Data3", ctypes.c_uint16), ("Data4", ctypes.c_ubyte * 8)]
+
+    @classmethod
+    def parse(cls, text):
+        value = uuid.UUID(text)
+        return cls(value.time_low, value.time_mid, value.time_hi_version, (ctypes.c_ubyte * 8)(*value.bytes[8:]))
+
+
+def load_ole32():
+    ole32 = ctypes.WinDLL("ole32")
+    ole32.CoInitializeEx.argtypes, ole32.CoInitializeEx.restype = [ctypes.c_void_p, ctypes.c_ulong], ctypes.c_long
+    ole32.CoCreateInstance.argtypes = [ctypes.POINTER(_GUID), ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(_GUID), ctypes.POINTER(ctypes.c_void_p)]
+    ole32.CoCreateInstance.restype = ctypes.c_long
+    return ole32
+
+
+def _method(interface, index, arguments):
+    """The COM method in slot `index` of `interface`, taking `this` plus `arguments` pointer-sized arguments."""
+    table = ctypes.cast(interface, ctypes.POINTER(ctypes.c_void_p))[0]
+    address = ctypes.cast(table, ctypes.POINTER(ctypes.c_void_p))[index]
+    return ctypes.CFUNCTYPE(ctypes.c_long, *([ctypes.c_void_p] * (1 + arguments)))(address)
+
+
+def _check(result, what):
+    code = result & 0xFFFFFFFF
+    if code & 0x80000000: raise UiaError(f"{what} failed: HRESULT 0x{code:08X}")
+
+
+class FocusPasswordProbe:
+    """True while the keyboard focus is in a password field (UIA IsPassword). Use it from one thread at a time
+    per thread: COM is initialised and IUIAutomation created lazily on each thread that calls it.
+    Call it from long-lived threads only (the capture thread): the automation object is kept per thread and never released."""
+
+    def __init__(self, ole32=None):
+        self._ole32 = ole32
+        self._local = threading.local()
+
+    def _automation(self):
+        automation = getattr(self._local, "automation", None)
+        if automation: return automation
+        if ctypes.sizeof(ctypes.c_void_p) != 8: raise UiaError("raw COM calls need a 64-bit process")
+        if self._ole32 is None: self._ole32 = load_ole32()
+        if not getattr(self._local, "com", False):
+            # MTA, as UI Automation clients are advised to use. S_FALSE: already initialised here.
+            # RPC_E_CHANGED_MODE: this thread is already an STA, which UI Automation also works in.
+            code = self._ole32.CoInitializeEx(None, COINIT_MULTITHREADED) & 0xFFFFFFFF
+            if code not in (S_OK, S_FALSE, RPC_E_CHANGED_MODE): _check(code, "CoInitializeEx")
+            self._local.com = True  # never uninitialised: the thread lives as long as the capture process
+        pointer = ctypes.c_void_p()
+        _check(self._ole32.CoCreateInstance(ctypes.byref(_GUID.parse(CLSID_CUIAUTOMATION)), None, CLSCTX_INPROC_SERVER,
+                                            ctypes.byref(_GUID.parse(IID_IUIAUTOMATION)), ctypes.pointer(pointer)), "CoCreateInstance")
+        if not pointer.value: raise UiaError("CoCreateInstance returned no object")
+        self._local.automation = pointer.value
+        return pointer.value
+
+    def focused_is_password(self):
+        automation = self._automation()
+        element = ctypes.c_void_p()
+        focused = _method(automation, VTABLE_GET_FOCUSED_ELEMENT, 1)(automation, ctypes.addressof(element))
+        if focused & 0x80000000 and element.value:  # a failed call can still have written an element
+            _method(element.value, VTABLE_RELEASE, 0)(element.value)
+        _check(focused, "GetFocusedElement")
+        if not element.value: return False  # nothing has the focus
+        flag = ctypes.c_int32()
+        try:
+            _check(_method(element.value, VTABLE_GET_CURRENT_IS_PASSWORD, 1)(element.value, ctypes.addressof(flag)), "get_CurrentIsPassword")
+        finally:
+            _method(element.value, VTABLE_RELEASE, 0)(element.value)
+        return bool(flag.value)
 
 
 class Backend:
@@ -40,8 +127,12 @@ class Backend:
         try: return foreground_is_lock_screen(self.user)
         except OSError: return False
 
-    # Secure Input (#16): Windows has no equivalent check here yet. A `secure_input(self)` method added to this class
-    # is picked up by capture.secure_input() with no other change: return True to skip the capture (an exception counts as True).
+    def secure_input(self):
+        """True while the keyboard focus is in a password field (#16), asked of UI Automation. Raises when the
+        answer cannot be had; capture then skips the frame. The probe is created on first use, on the calling thread."""
+        probe = getattr(self, "_password_probe", None)
+        if probe is None: probe = self._password_probe = FocusPasswordProbe()
+        return probe.focused_is_password()
 
     def window_identity(self, hwnd):
         import psutil
