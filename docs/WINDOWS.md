@@ -90,4 +90,15 @@ Use this list when you test a build on real hardware:
 14. **Delete Recent** → Last 5 min deletes only frames from that window, including ones still in the spool; No deletes nothing.
 15. The frozen build starts `screen-context.exe ui` without a console window, and the UI process exits when its session ends.
 
+### Secure Input (#16)
+
+16. With a password field focused in Edge, Chrome and a Win32 dialog, capture is skipped and `secure_input` is counted. A normal text field and the desktop are still captured.
+17. With an elevated (administrator) window focused, record whether it is captured, skipped, or reports an `error_type`. UI Automation may be denied across integrity levels.
+18. Record the cost of one check in milliseconds, measured on the capture thread.
+19. The frozen build behaves the same as the script run.
+20. The process does not crash (no access violation) while focus moves repeatedly between password and normal fields for several minutes.
+21. When UI Automation fails (for example, the check raises), capture is skipped and `capture-status.json` records `error_type` as `UiaError`.
+22. With a password field focused, `get_current_screen` returns denied.
+23. With a window that does not respond focused, record how long one check takes in milliseconds.
+
 Before and after each capture, ScreenContext compares the window handle, process ID, process start time and title, and discards the image if any changed. This does not detect content that changes inside the same window and title.
