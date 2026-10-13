@@ -67,6 +67,27 @@ screen-context mcp-config --client <name> --write [--dry-run] [--force]
 
 Merge the `screen-context` entry into the existing file. Keep your other servers.
 
+## Remove the entry (uninstall)
+
+```sh
+screen-context uninstall --dry-run     # prints the plan as JSON, including every client file it would change; changes nothing
+screen-context uninstall               # removes the entries, revokes the tokens, and more (see the README)
+```
+
+The menu bar item **Uninstall ScreenContext…** does the same. For the clients below, only the entry named `screen-context` is removed. Your other servers stay, and the file is first copied to `<file>.screen-context-YYYYmmdd-HHMMSS.bak` (the newest 5 are kept; they contain the old token, so delete them if you do not need them).
+
+| Client | What uninstall does |
+|---|---|
+| Claude Desktop, Cursor, VS Code, Gemini CLI, Codex CLI | Removes the entry from the file `--write` uses. |
+| Claude Code | Nothing. Run `claude mcp remove screen-context --scope user`. |
+| Windsurf, other clients | Nothing. Delete the entry yourself. |
+| Any client whose file cannot be edited safely (comments in JSON, a syntax error) | Nothing. The confirmation names the file; delete the entry yourself. |
+
+- An entry that points at another data folder (`SCREEN_CONTEXT_HOME`) is kept, and so are related entries.
+- Entries that look like ScreenContext's but have another name (for example from `--name`) are listed in the JSON from `--dry-run` under `remains` with `code: related` (the confirmation shows them as "What stays"). Add `--include NAME` for each one to remove it as well.
+- Uninstall revokes every client token. If you remove an entry by hand instead, run `screen-context clients revoke NAME` so the old token stops working.
+- Restart the client afterwards.
+
 ## Choosing a profile
 
 - `standard` (default): search, recent activity, context around a time, and day material. IDE and terminal windows are hidden. Use this for coding assistants.
