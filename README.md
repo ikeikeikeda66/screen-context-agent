@@ -143,6 +143,8 @@ Print a ready-to-paste entry for your client:
 .venv/bin/screen-context mcp-config --client generic         # plain mcpServers JSON
 ```
 
+On macOS, `mcp-config --client <name> --write` writes the entry into the client's configuration file for Claude Desktop, Cursor, VS Code, Gemini CLI and Codex. It keeps a backup of the previous file. Use `--dry-run` to preview the change first. The token is written into that file, so do not commit it or put it in a synced folder.
+
 The client starts the server itself over stdio. How access works:
 
 1. Each `mcp-config` run issues a token for that client and embeds it in the entry. Running it again for the same client replaces the token, and the old entry stops working.

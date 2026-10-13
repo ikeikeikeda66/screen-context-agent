@@ -72,6 +72,26 @@ def state(settings, name):
     return row["state"] if row else None
 
 
+def matches(settings, name, token, profile=None):
+    """True when `token` is the live (active or pending) token of client `name`, optionally for exactly `profile`.
+    Used to keep a valid token already written into a client's configuration instead of issuing a new one."""
+    if not token or not isinstance(token, str): return False
+    with store.connect(settings, readonly=True) as con:
+        row = con.execute("SELECT token_sha256, profile, state FROM clients WHERE name = ?", (name,)).fetchone()
+    return bool(row and hmac.compare_digest(row["token_sha256"], digest(token)) and row["state"] in ("active", "pending")
+                and (profile is None or row["profile"] == profile_name(profile)))
+
+
+def owner(settings, token):
+    """Name of the client whose live (active or pending) token is `token`, or None. Read-only."""
+    if not token or not isinstance(token, str): return None
+    wanted = digest(token)
+    with store.connect(settings, readonly=True) as con:
+        rows = con.execute("SELECT name, token_sha256, state FROM clients").fetchall()
+    row = next((r for r in rows if hmac.compare_digest(r["token_sha256"], wanted) and r["state"] in ("active", "pending")), None)
+    return row["name"] if row else None
+
+
 def admit(settings, name, timeout=60):
     """Return `name` once the client is approved. A pending client triggers one approval dialog in
     the capture app and waits for the user's answer; tool calls run in worker threads, so waiting

@@ -29,9 +29,12 @@ def _main():
     ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
     ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
-    config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
+    config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client, or write it into the client's configuration file (--write)")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
     config.add_argument("--name", help="Name for this client's token (default: the client). Running again replaces its token.")
+    config.add_argument("--write", action="store_true", help="add the entry to the client's own configuration file (a backup is kept)")
+    config.add_argument("--dry-run", action="store_true", help="with --write: show what would change and write nothing")
+    config.add_argument("--force", action="store_true", help="with --write: replace an existing entry that points at another data folder or is an HTTP (url) entry")
     clients = sub.add_parser("clients", help="List or revoke MCP client tokens")
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
@@ -210,10 +213,37 @@ def _main():
         from .access import issue
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
+        if (args.dry_run or args.force) and not args.write: parser.error("--dry-run and --force need --write")
         if not settings.db.exists(): parser.error("run screen-context init first")
         profile = profile_name(args.profile)
-        token = issue(settings, args.name or args.client, profile)
         name = args.name or args.client
+        if args.write:
+            from . import client_config
+            from .i18n import resolve, t
+            lang = resolve(settings)
+            change = client_config.plan(settings, args.client, name=name, profile=profile, force=args.force)
+            if change.action == "conflict":
+                key = "cfg.conflict_http" if change.reason == "http" else "cfg.conflict"
+                print(t(key, lang, path=change.path, home=change.other_home), file=sys.stderr); sys.exit(2)
+            if change.action == "manual":
+                print(t("cfg.reason." + change.reason, lang, client=args.client) + " " + t("cfg.by_hand", lang), file=sys.stderr)
+                if args.dry_run: print(change.manual); return  # placeholder token; nothing was issued
+            else:
+                if args.dry_run or change.action == "unchanged":
+                    if change.action == "unchanged": print(t("cfg.unchanged", lang, path=change.path)); return
+                    print(t("cfg.dry_run", lang, path=change.path, action=t("cfg.action." + change.action, lang)))
+                    import difflib
+                    print("\n".join(difflib.unified_diff(change.before.splitlines(), change.after.splitlines(), "before", "after", lineterm="")))
+                    return
+                try: result = client_config.apply(change)
+                except (RuntimeError, OSError) as why:
+                    print(t("cfg.failed", lang, path=change.path, reason=type(why).__name__), file=sys.stderr); sys.exit(1)
+                print(t("cfg." + change.action, lang, path=result["path"]))
+                if result["backup"]: print(t("cfg.backup", lang, path=result["backup"]))
+                if change.previous_owner: print(t("cfg.previous_owner", lang, owner=change.previous_owner))
+                print(t("cfg.next", lang, client=args.client, name=name))
+                return
+        token = issue(settings, name, profile)
         print(f"Add to: {CLIENTS[args.client]}. This replaces any earlier token for {name}. "
               f"On its first call, approve {name} in the ScreenContext app (or run: screen-context clients approve {name}).", file=sys.stderr)
         print(render(args.client, cli_command(), settings, token, profile)); return
