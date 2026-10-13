@@ -200,3 +200,178 @@ def test_through_the_real_mcp_server(settings, monkeypatch):
 def test_missing_afk_data_filters_nothing(settings):
     _, asked = run_companion(settings, FakeAW([win(0, 100, "Code")], []), [])
     assert asked == [(T0, T0 + 100)]
+
+
+# --- aw_range: a time range given on the command line (#72) ------------------------------------------
+
+def aw_range_module():
+    spec = importlib.util.spec_from_file_location("aw_range", Path(__file__).parent.parent / "examples" / "activitywatch" / "aw_range.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# Four frames one second-ish around each edge of [T0, T0 + 60). Each has its own app so blocks never merge.
+FOUR = [("P1-before-start", T0 - 0.001), ("P2-at-start", T0), ("P3-before-end", T0 + 59.999), ("P4-at-end", T0 + 60)]
+IN_RANGE, OUT_OF_RANGE = ["P2-at-start", "P3-before-end"], ["P1-before-start", "P4-at-end"]
+
+
+def add_four(settings):
+    return {text: add(settings, text, app=f"com.example.{text[:2]}", ts=ts)["id"] for text, ts in FOUR}
+
+
+def direct_caller(settings, client="activitywatch"):
+    async def call(start, end, limit):
+        return Service(settings, client=client).get_activity_between(start, end, limit)
+    return call
+
+
+def test_service_range_is_half_open_at_both_edges(settings):
+    ids = add_four(settings)
+    result = Service(settings, client="activitywatch").get_activity_between(T0, T0 + 60)
+    text = json.dumps(result, ensure_ascii=False)
+    assert all(t in text for t in IN_RANGE) and not any(t in text for t in OUT_OF_RANGE)
+    [row] = [r for r in audit.rows(settings, client="activitywatch") if r["action"] == "get_activity_between"]
+    assert row["frame_ids"] and not set(row["frame_ids"]) & {ids[t] for t in OUT_OF_RANGE}
+
+
+def test_aw_range_takes_unix_seconds_and_keeps_the_half_open_range(settings, capsys):
+    add_four(settings)
+    aw_range_module().main(["--start", str(T0), "--end", str(T0 + 60), "--format", "json"], caller=direct_caller(settings))
+    out = capsys.readouterr().out
+    assert all(t in out for t in IN_RANGE) and not any(t in out for t in OUT_OF_RANGE)
+
+
+def test_aw_range_takes_iso_8601_with_offset(settings, capsys):
+    add_four(settings)
+    start, end = iso_offset(T0), iso_offset(T0 + 60)
+    aw_range_module().main(["--start", start, "--end", end, "--format", "json"], caller=direct_caller(settings))
+    out = capsys.readouterr().out
+    assert all(t in out for t in IN_RANGE) and not any(t in out for t in OUT_OF_RANGE)
+
+
+def iso_offset(ts): return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+
+
+def test_aw_context_range_keeps_the_half_open_range(settings, capsys):
+    add_four(settings)
+    fake = FakeAW([win(-10, 300, "Chrome")], [afk(-10, 300, "not-afk")])
+    aw.main(["--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc", "--format", "json"],
+            opener=fake, caller=direct_caller(settings))
+    out = capsys.readouterr().out
+    assert all(t in out for t in IN_RANGE) and not any(t in out for t in OUT_OF_RANGE)
+
+
+@pytest.mark.parametrize("argv", [[], ["--start", str(T0)], ["--end", str(T0 + 60)],
+                                  ["--start", str(T0 + 60), "--end", str(T0)], ["--start", str(T0), "--end", str(T0)],
+                                  ["--start", str(T0), "--end", str(T0 + 8 * 86400)],
+                                  ["--start", "10:00", "--end", "11:00"], ["--start", "abc", "--end", str(T0 + 60)]])
+def test_aw_range_refuses_bad_ranges_before_any_lookup(argv):
+    with pytest.raises(SystemExit): aw_range_module().main(argv, caller=lambda *a: pytest.fail("looked up"))
+
+
+def test_aw_range_never_connects_to_activitywatch(settings, monkeypatch, capsys):
+    import socket
+    import urllib.request
+    def refuse(*a, **k): raise AssertionError("connected to ActivityWatch")
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    add_four(settings)
+    aw_range_module().main(["--start", str(T0), "--end", str(T0 + 60), "--format", "json"], caller=direct_caller(settings))
+    assert IN_RANGE[0] in capsys.readouterr().out
+
+
+def test_aw_context_rejects_last_together_with_from_and_to(settings):
+    fake = FakeAW([win(0, 300, "Code")], [])
+    with pytest.raises(SystemExit): aw.main(["--last", "30m", "--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc"],
+                                            opener=fake, caller=lambda *a: pytest.fail("looked up"))
+    assert fake.requests == []
+
+
+class ReadOnlyFakeAW(FakeAW):
+    """FakeAW that also checks each request is a plain GET of the bucket list or one bucket's events, inside [start, end)."""
+    def __init__(self, window, status, start, end):
+        super().__init__(window, status)
+        self.start, self.end = start, end
+
+    def __call__(self, request, timeout=None):
+        assert request.data is None and request.get_method() == "GET"
+        url = urllib.parse.urlparse(request.full_url)
+        assert url.path == "/api/0/buckets/" or (url.path.startswith("/api/0/buckets/") and url.path.endswith("/events")
+                                                  and url.path.count("/") == 5), url.path
+        if url.path.endswith("/events"):
+            query = urllib.parse.parse_qs(url.query)
+            s, e = (datetime.fromisoformat(query[k][0].replace("Z", "+00:00")).timestamp() for k in ("start", "end"))
+            assert self.start <= s and e <= self.end
+        return super().__call__(request, timeout)
+
+
+def test_read_only_fake_activitywatch_only_gets_the_range(settings, capsys):
+    add_four(settings)
+    fake = ReadOnlyFakeAW([win(-10, 300, "Chrome")], [afk(-10, 300, "not-afk")], T0, T0 + 60)
+    aw.main(["--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc", "--format", "json"],
+            opener=fake, caller=direct_caller(settings))
+    assert fake.requests and {m for m, _ in fake.requests} == {"GET"}
+
+
+def test_aw_range_through_the_real_mcp_server(settings, monkeypatch, capsys):
+    add(settings, "editing main.py", ts=T0 + 20, app="com.google.Chrome")
+    add(settings, SECRET, ts=T0 + 400, app="com.google.Chrome")
+    token = access.issue(settings, "activitywatch")
+    access.decide(settings, "activitywatch", True, "cli")
+    env = {**os.environ, "SCREEN_CONTEXT_HOME": str(settings.root), "SCREEN_CONTEXT_PLAINTEXT": "1", "SCREEN_CONTEXT_CLIENT_TOKEN": token}
+    for key, value in env.items(): monkeypatch.setenv(key, value)
+    aw_range_module().main(["--start", str(T0), "--end", str(T0 + 300), "--format", "json",
+                            "--server", f"{sys.executable} -m screen_context.cli serve"])
+    out = capsys.readouterr().out
+    assert "editing main.py" in out and SECRET not in out
+    [row] = [r for r in audit.rows(settings, client="activitywatch") if r["action"] == "get_activity_between"]
+    assert row["params"]["start"] == T0 and row["params"]["end"] == T0 + 300
+
+
+# --- aw_range and aw_context input checks (#72 review) ---------------------------------------------
+
+@pytest.mark.parametrize("argv", [["--start", str(T0), "--end", str(T0 + 60), "--limit", "0"],
+                                  ["--start", str(T0), "--end", str(T0 + 60), "--limit", "51"],
+                                  ["--start", "20261004", "--end", "20261005"]])
+def test_aw_range_refuses_bad_limit_and_short_digit_times_before_any_lookup(argv):
+    with pytest.raises(SystemExit): aw_range_module().main(argv, caller=lambda *a: pytest.fail("looked up"))
+
+
+def test_aw_range_without_a_token_never_starts_the_mcp_server(monkeypatch):
+    monkeypatch.delenv("SCREEN_CONTEXT_CLIENT_TOKEN", raising=False)
+    mod = aw_range_module()
+    started = []
+    def recording_caller(*a, **k):
+        started.append(a)
+        raise AssertionError("started the MCP server")
+    monkeypatch.setattr(mod.aw, "mcp_caller", recording_caller)
+    with pytest.raises(SystemExit, match="SCREEN_CONTEXT_CLIENT_TOKEN"):
+        mod.main(["--start", str(T0), "--end", str(T0 + 60)])
+    assert started == []
+
+
+@pytest.fixture
+def tokyo(monkeypatch):
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_aw_range_local_time_without_offset_is_read_as_local_time(tokyo):
+    seen = []
+    async def call(start, end, limit):
+        seen.append((start, end))
+        return {"records": [], "more": False}
+    # 2026-09-21T23:13:20 in Asia/Tokyo is 2026-09-21T14:13:20Z, that is T0.
+    aw_range_module().main(["--start", "2026-09-21T23:13:20", "--end", "2026-09-21T23:14:20", "--format", "json"], caller=call)
+    assert seen == [(T0, T0 + 60)]
+
+
+def test_aw_context_refuses_a_zero_last_together_with_from_and_to():
+    fake = FakeAW([win(0, 300, "Code")], [])
+    with pytest.raises(SystemExit): aw.main(["--last", "0m", "--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc"],
+                                            opener=fake, caller=lambda *a: pytest.fail("looked up"))
+    assert fake.requests == []

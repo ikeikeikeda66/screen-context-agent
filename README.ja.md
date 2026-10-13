@@ -149,7 +149,7 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 
 クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
-[ActivityWatch](https://activitywatch.net/) と組み合わせる例は [examples/activitywatch](examples/activitywatch)（英語）にあります。ActivityWatch のウィンドウ履歴から選んだ時間帯について、ScreenContext が記録した画面を参照します。自分で実行するコマンドで、ActivityWatch のデータは読むだけです。
+[ActivityWatch](https://activitywatch.net/) と組み合わせる例は [examples/activitywatch](examples/activitywatch/README.ja.md) にあります。ActivityWatch のウィンドウ履歴から選んだ時間帯について、ScreenContext が記録した画面を参照します。自分で実行するコマンドで、ActivityWatch のデータは読むだけです。
 
 ### プロファイルとツール
 

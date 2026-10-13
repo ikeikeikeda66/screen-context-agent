@@ -170,7 +170,10 @@ def parse_span(value):
 
 
 def time_range(args, now):
-    if args.last: return now.timestamp() - args.last, now.timestamp()
+    if args.last is not None and (args.start or args.end): raise SystemExit("give --last, or --from and --to, not both")
+    if args.last is not None:
+        if args.last <= 0: raise SystemExit("--last must be more than 0")
+        return now.timestamp() - args.last, now.timestamp()
     if not (args.start and args.end): raise SystemExit("give --last, or both --from and --to")
     start, end = parse_time(args.start, now), parse_time(args.end, now)
     if not start < end: raise SystemExit("--from must be before --to")
