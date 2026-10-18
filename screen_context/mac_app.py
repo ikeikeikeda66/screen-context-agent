@@ -2,9 +2,9 @@
 import time
 import threading
 import objc
-from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny, NSButton, NSStackView, NSWorkspace, NSLayoutAttributeLeading
+from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny, NSButton, NSStackView, NSTextField, NSWorkspace, NSLayoutAttributeLeading
 from Foundation import NSObject, NSDate, NSDefaultRunLoopMode, NSURL
-from . import launch, onboarding, quick, reauth
+from . import launch, onboarding, quick, reauth, uninstall_flow
 from .config import Settings
 from .i18n import CHOICES, auth, interval_label, resolve, t
 
@@ -72,6 +72,19 @@ class MenuController(NSObject):
         except Exception as error:
             self.showError(t("error.connect", lang, error=type(error).__name__))
 
+    def uninstall_(self, sender):
+        """Only asks (#37). The work runs in main() after the capture loop, capture.lock and the indexer are gone."""
+        if self.pending is not None: return
+        lang = self.lang()
+        try:
+            plan = uninstall_flow.ask(self.settings, UninstallDialogs(), lang)
+        except Exception as error:
+            self.showError(t("error.uninstall", lang, error=type(error).__name__))
+            return
+        if plan is None: return          # cancelled: nothing was changed
+        self.pending = plan
+        self.stop.set()                  # ends the capture loop; main() then calls uninstall_flow.finish
+
     def loginToggle_(self, sender):
         """Start at login through the app's own login item (#34)."""
         lang = self.lang()
@@ -109,6 +122,7 @@ class MenuController(NSObject):
         self.language_parent.setTitle_(t("menu.language", lang))
         self.quit_item.setTitle_(t("menu.quit", lang))
         self.connect_item.setTitle_(t("menu.connect", lang))
+        self.uninstall_item.setTitle_(t("menu.uninstall", lang))
         self.login_item.setTitle_(t("menu.login", lang))
         self.login_item.setEnabled_(self.login is not None)
         self.login_item.setState_(int(launch.login_enabled(self.login)))
@@ -130,15 +144,18 @@ class MenuController(NSObject):
 SCREEN_RECORDING_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 
 
+def make_alert(title, body, buttons):
+    alert = NSAlert.alloc().init()
+    alert.setMessageText_(title)
+    alert.setInformativeText_(body)
+    for button in buttons: alert.addButtonWithTitle_(button)   # first button: the default (Return)
+    NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+    return alert
+
+
 class SetupDialogs:
     """The dialogs of onboarding.run (first-run guide). Plain object: onboarding.py never imports AppKit."""
-    def _alert(self, title, body, buttons):
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_(title)
-        alert.setInformativeText_(body)
-        for button in buttons: alert.addButtonWithTitle_(button)   # first button: the default (Return)
-        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        return alert
+    def _alert(self, title, body, buttons): return make_alert(title, body, buttons)
 
     def permission(self, lang):
         alert = self._alert(t("setup.permission.title", lang), t("setup.permission.body", lang),
@@ -165,6 +182,28 @@ class SetupDialogs:
         alert.setAccessoryView_(stack)
         if alert.runModal() == NSAlertSecondButtonReturn: return []
         return [client for (client, _), box in zip(options, boxes) if int(box.state()) == 1]
+
+
+class UninstallDialogs:
+    """The dialogs of uninstall_flow. The first button (Return) is always the harmless one."""
+    def confirm(self, title, body, ok, cancel):
+        alert = make_alert(title, body, (cancel, ok))
+        alert.buttons()[0].setKeyEquivalent_("\x1b")                 # Esc cancels too
+        if hasattr(alert.buttons()[1], "setHasDestructiveAction_"): alert.buttons()[1].setHasDestructiveAction_(True)
+        return alert.runModal() == NSAlertSecondButtonReturn
+
+    def ask_word(self, title, body, ok, cancel):
+        alert = make_alert(title, body, (cancel, ok))
+        field = NSTextField.alloc().initWithFrame_(((0, 0), (260, 24)))
+        alert.setAccessoryView_(field)
+        alert.window().setInitialFirstResponder_(field)
+        alert.buttons()[0].setKeyEquivalent_("\x1b")                 # Esc cancels too
+        if hasattr(alert.buttons()[1], "setHasDestructiveAction_"): alert.buttons()[1].setHasDestructiveAction_(True)
+        if alert.runModal() != NSAlertSecondButtonReturn: return None
+        return str(field.stringValue())
+
+    def report(self, title, body=""):
+        make_alert(title, body, ()).runModal()               # no button given: AppKit shows its own default OK
 
 
 def screen_recording():
@@ -227,6 +266,7 @@ def main():
     controller = MenuController.alloc().init()
     controller.settings = settings
     controller.stop = threading.Event()
+    controller.pending = None            # the confirmed uninstall plan, carried out after the capture loop
     controller.item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
     menu = NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
@@ -248,6 +288,9 @@ def main():
     controller.connect_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "connectClient:", "")
     controller.connect_item.setTarget_(controller)
     menu.addItem_(controller.connect_item)
+    controller.uninstall_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "uninstall:", "")
+    controller.uninstall_item.setTarget_(controller)
+    menu.addItem_(controller.uninstall_item)
     controller.login = launch.login_service()
     controller.login_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "loginToggle:", "")
     controller.login_item.setTarget_(controller)
@@ -270,6 +313,10 @@ def main():
     finally:
         stop_indexer(controller)
         NSStatusBar.systemStatusBar().removeStatusItem_(controller.item)
+    if controller.pending is not None:
+        # capture.lock was released when the with-block ended and the indexer has stopped, so apply() can take both locks.
+        # lang is read before: a wipe deletes the language setting with the data folder. Nothing captures after this point.
+        uninstall_flow.finish(controller.pending, UninstallDialogs(), controller.lang())
 
 
 def start_indexer(controller, settings):

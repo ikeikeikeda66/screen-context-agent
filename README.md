@@ -34,7 +34,7 @@ ScreenContext currently runs from source. Choose your platform guide before inst
 | macOS 14+ | Supported. Build the menu bar app on the Mac that will run it; the app is not notarized and there is no ready-to-download installer. [macOS setup](#quick-start-macos) |
 | Windows 10/11 x64 | Supported. Run the control window from source or build the portable package on Windows. Hardware testing was performed on Windows 11 23H2; ARM64 is not covered. [Windows setup](#windows-setup) |
 
-After starting the app (it runs capture and the indexer), generate a client configuration with `screen-context mcp-config --client <name>`. The supported client names and setup details are in [Connect an MCP client](#connect-an-mcp-client). On first use, approve that client in the ScreenContext app. Then try asking your assistant: “Find the error message I was looking at in the browser a moment ago.”
+Start the app. On first start it guides you through the Screen Recording permission, creates the encrypted store, and offers to connect the AI assistants it finds on this Mac. Other clients are set up with `screen-context mcp-config --client <name>`; the supported names and setup details are in [Connect an MCP client](#connect-an-mcp-client). On first use, approve that client in the ScreenContext app. Then try asking your assistant: “Find the error message I was looking at in the browser a moment ago.”
 
 Screen history stays in the local encrypted store. Lookups require an approved client, and you can inspect or revoke client access. OCR can misread text, and exclusions cannot catch every sensitive screen; review [What is recorded](#what-is-recorded) and [Known limitations](#known-limitations) before enabling capture.
 
@@ -67,7 +67,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Planned work: [docs/R
 
 ## Quick start (macOS)
 
-**1. Install and create the encrypted store**
+**1. Install**
 
 ```sh
 git clone https://github.com/ikeikeikeda66/screen-context-agent.git
@@ -76,7 +76,7 @@ uv sync --locked --extra macos --extra encrypted --extra dev
 .venv/bin/screen-context init
 ```
 
-`init` creates `~/Library/Application Support/ScreenContext` and stores a random encryption key in the macOS Keychain. If you lose the key, the history cannot be decrypted; `screen-context backup` keeps a passphrase-protected copy.
+`init` creates `~/Library/Application Support/ScreenContext` and stores a random encryption key in the macOS Keychain. The app does the same on its first start, so you only need `init` to use the command line before the app. If you lose the key, the history cannot be decrypted; `screen-context backup` keeps a passphrase-protected copy.
 
 **2. Build, sign and start the menu bar app**
 
@@ -88,7 +88,13 @@ SCREEN_CONTEXT_SIGN_IDENTITY="ScreenContext Local Signing" sh packaging/build_ma
 open dist/ScreenContext.app
 ```
 
-Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, then open the app again. The app runs both capture and the indexer (OCR); the menu shows whether the indexer is running. Turn on **Start at Login** in its menu to start it with your Mac. After a rebuild, macOS may ask once whether `codesign` may use the signing key; choose Always Allow.
+The app runs both capture and the indexer (OCR); the menu shows whether the indexer is running. On first start it guides you through three steps, and capture starts only after the last one:
+
+1. **Screen Recording**: if macOS has not allowed it yet, the app asks you to turn on ScreenContext in System Settings > Privacy & Security > Screen Recording and quits. macOS applies the change only after the app is reopened, so open it again.
+2. **Encrypted store**: the app creates the key and the database.
+3. **AI assistants**: the app lists the supported assistants it finds (Claude Desktop, Cursor, VS Code, Gemini CLI, Codex CLI), none ticked. Tick the ones to connect, or choose Skip. A backup of each file is kept.
+
+If you stop partway, the app continues from where it stopped at the next start. An installation that already has a database is not asked again. Then turn on **Start at Login** in the menu if you want the app to start with your Mac. After a rebuild, macOS may ask once whether `codesign` may use the signing key; choose Always Allow.
 
 - A Developer ID identity works the same way. `SCREEN_CONTEXT_SIGN_IDENTITY=-` (ad hoc) also builds, but the permission must be granted again after every rebuild.
 - The app is not notarized. Build it on the Mac that runs it: a copy downloaded or moved from another Mac is blocked by Gatekeeper.
@@ -96,7 +102,9 @@ Allow ScreenContext in System Settings > Privacy & Security > Screen Recording, 
 - Without the app (for example to OCR frames captured earlier), run the indexer in a terminal: `.venv/bin/screen-context index --watch`. Do not run it while the app is open; only one indexer can run.
 - If you set up the indexer LaunchAgent from an earlier version, the app offers to remove it on first start. See [packaging/macos/README.md](packaging/macos/README.md).
 
-**3. Connect your assistant**: see [Connect an MCP client](#connect-an-mcp-client).
+**3. Connect your assistant**: the guide above already offered the assistants it found. To connect one you installed later, choose **Connect an AI Assistant…** in the menu. Claude Code, Windsurf and other clients are added from Terminal: see [Connect an MCP client](#connect-an-mcp-client).
+
+The built app also contains a command-line entry, `ScreenContext.app/Contents/MacOS/screen-context`, for the `screen-context` commands in this README when you did not install from a checkout. It always runs the command line (with no arguments it shows the help), never the menu bar app.
 
 ### Menu bar
 
@@ -109,6 +117,8 @@ The menu bar shows **SC Rec** while recording and **SC Paused** while paused.
 - **Language**: System Default, English or 日本語. All menu text, dialogs, and generated material follow this setting.
 - **Open Today…**: asks for Touch ID (or your login password), then opens the [Today view](#today-view) in your browser.
 - **Delete Recent**: last 5 min, 15 min or hour, for when something was recorded by mistake. It shows what it will delete (and which assistants already received it) and asks before deleting. Frames still waiting for OCR in that window are deleted too. No undo.
+- **Connect an AI Assistant…**: offers the installed AI assistants again (none ticked) and adds the entry to the ones you tick.
+- **Uninstall ScreenContext…**: see [Uninstall](#uninstall).
 
 ## Today view
 
@@ -130,7 +140,7 @@ The page runs on 127.0.0.1 only and opens through a one-time link. The session e
 
 ## Connect an MCP client
 
-Print a ready-to-paste entry for your client:
+Print a ready-to-paste entry for your client. Use `.venv/bin/screen-context` from a source checkout, or `ScreenContext.app/Contents/MacOS/screen-context` from the built app:
 
 ```sh
 .venv/bin/screen-context mcp-config --client claude-code     # prints a `claude mcp add` command
@@ -275,13 +285,47 @@ The `sensitive_*` and `pii_combinations` rules are on by default; set a key to `
 | See what assistants read | `audit list [--client NAME]`, `audit export` | Client, time, tool, query text, arguments and returned frame IDs. Never served over MCP. `audit export` writes plaintext JSON Lines and is itself logged. |
 | Take data out | `export --from T [--to T] --format jsonl\|md\|csv\|viking` | Policy applied; IDE windows included unless `--exclude-ide`; never overwrites. Audited with frame IDs so a later `purge` warns that a copy exists. An administrator can disable it (`export_allowed`). |
 | Move to another machine | `backup FILE`, then `restore FILE [--replace]` | One archive: a consistent database snapshot, previews and settings, still encrypted, plus the data key sealed with your passphrase (scrypt, AES-GCM). `restore` checks the passphrase before writing anything. Without the passphrase the archive cannot be opened. |
-| Erase everything | `wipe` (type `ERASE`) | Deletes the key from the credential store first, which makes every encrypted file unreadable, then the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase. |
+| Erase everything | `wipe` (type `ERASE`) | Deletes the key from the credential store first, which makes every encrypted file unreadable, then the data folder. Quit capture and the indexer first. Backups can still be restored with their passphrase. To also remove ScreenContext from AI clients and Login Items, use [`uninstall --wipe`](#uninstall). |
 
 Storage details:
 
 - Spool files and preview images use AES-GCM. The database and full-text index use SQLCipher. The key lives in the OS credential store (Keychain or Windows Credential Manager), or in `SCREEN_CONTEXT_KEY` for headless use.
 - The spool stops accepting frames at 100 files or 512 MB. Unprocessed frames older than 24 hours are deleted by `maintain`.
 - `SCREEN_CONTEXT_PLAINTEXT=1` is for development tests only. ScreenContext never falls back to plaintext on its own.
+
+## Uninstall
+
+Choose **Uninstall ScreenContext…** in the menu bar, or run `screen-context uninstall` in Terminal. Both show what will change and what stays, and nothing changes until you confirm. In the menu, Cancel is the default button: choosing it, pressing Return or pressing Esc changes nothing. In Terminal, any input other than the confirmation word (`UNINSTALL`, or `ERASE` with `--wipe`) changes nothing.
+
+What it removes:
+
+- The `screen-context` entry from the configuration files of Claude Desktop, Cursor, VS Code, Gemini CLI and Codex CLI. Each file is backed up first (`<file>.screen-context-YYYYmmdd-HHMMSS.bak`) and your other servers are kept. An entry that points at another data folder is kept.
+- Every client token (`screen-context clients list` shows them as revoked).
+- Start at Login, and the old indexer LaunchAgent from earlier versions (unloaded; its file is renamed to `.disabled`).
+- The log folder `~/Library/Logs/ScreenContext`. It holds only the indexer's stdout and stderr, never screen text.
+
+What it does not do:
+
+- **Your history and encryption key stay** in the data folder, so installing again finds them. In the menu, choose **Erase Data…** in the second dialog, or pass `--wipe` (Terminal) to delete the key from the Keychain and the whole data folder, including an `exports` folder inside it. No undo.
+- The ScreenContext app: move it to the Trash yourself.
+- Backups and exports you saved outside the data folder. A backup restores with its passphrase.
+- Entries you added with `mcp-config --name` or under another name that look like ScreenContext's. `--dry-run` prints them in its JSON `remains` list with `code: related`, and the confirmation shows them under "What stays". Remove one with `--include NAME`.
+- Claude Code, Windsurf and other clients that ScreenContext cannot edit. The confirmation lists the command or file for each, for example `claude mcp remove screen-context --scope user`.
+- Start at Login, when you run the command from a source checkout (only the app can remove its own login item): open System Settings > General > Login Items and remove ScreenContext.
+
+From the menu: the app asks to confirm (Cancel is the default), then asks whether to keep or erase your data. Erasing asks you to type `ERASE`. After you confirm, the app stops capture and the indexer, carries out the steps, shows the result and quits.
+
+From Terminal:
+
+```sh
+screen-context uninstall --dry-run              # show the plan as JSON, change nothing
+screen-context uninstall                        # confirm by typing UNINSTALL
+screen-context uninstall --wipe                 # also erase the key and all data; type ERASE
+screen-context uninstall --include NAME         # also remove a related entry listed by --dry-run (repeatable)
+screen-context uninstall --confirm UNINSTALL    # skip the prompt (ERASE with --wipe)
+```
+
+Quit the ScreenContext app first when you use Terminal: with capture or the indexer running, nothing is changed. If a step fails, the others still run, the command exits with status 1, and the output says which step failed. Run it again to retry.
 
 ## Threat model
 
@@ -353,7 +397,7 @@ screen-context review [--days N] [--format md]  usage report for tuning (counts 
 
 # MCP clients
 screen-context serve [--profile standard|full] [--transport stdio|http] [--port 8765]
-screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME]
+screen-context mcp-config [--client NAME] [--profile standard|full] [--name TOKEN_NAME] [--write [--dry-run] [--force]]
 screen-context clients list | approve NAME | revoke NAME
 screen-context audit list|export [--client NAME] [--since YYYY-MM-DD] [--limit N]
 
@@ -367,6 +411,7 @@ screen-context pii-scan [--apply]       apply the rules to frames recorded earli
 screen-context export --from T [--to T] [--format jsonl|md|csv|viking] [--out DIR] [--exclude-ide]
 screen-context backup FILE | restore FILE [--replace]   passphrase-protected archive
 screen-context wipe                     delete the key, then all data (no undo)
+screen-context uninstall [--wipe] [--include NAME] [--dry-run] [--confirm WORD]   remove ScreenContext from AI clients, Login Items and launchd
 
 # Optional
 screen-context diary-material DATE [--budget 6000] [--lang en|ja]
