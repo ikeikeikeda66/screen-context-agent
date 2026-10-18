@@ -20,6 +20,28 @@ def make_adapter(windows):
     return macos.Backend.__new__(macos.Backend), monkeypatch_content
 
 
+def fake_objc(log):
+    """Stands in for PyObjC's autorelease_pool; records enter/exit around the ObjC calls made inside it."""
+    class Pool:
+        def __enter__(self): log.append("enter")
+        def __exit__(self, *_): log.append("exit")
+    return SimpleNamespace(autorelease_pool=lambda: Pool())
+
+
+def test_capture_runs_inside_an_autorelease_pool_and_exits_on_error(monkeypatch):
+    log = []
+    monkeypatch.setattr(macos, "objc", fake_objc(log))
+    adapter = macos.Backend.__new__(macos.Backend)
+    front = {"app_bundle": "com.apple.finder", "window_title": "Desktop", "window_id": 42}
+    def shareable_content():
+        log.append("shareable")
+        return SimpleNamespace(windows=lambda: [])
+    monkeypatch.setattr(macos.sck, "shareable_content", shareable_content)
+    with pytest.raises(RuntimeError, match="Foreground window disappeared"):
+        adapter.capture(front)
+    assert log == ["enter", "shareable", "exit"]
+
+
 def test_capture_raises_when_no_foreground_window():
     adapter = macos.Backend.__new__(macos.Backend)
     front = {"app_bundle": "com.apple.finder", "window_title": "Desktop", "window_id": None}

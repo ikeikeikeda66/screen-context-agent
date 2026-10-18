@@ -3,6 +3,7 @@ import json
 import multiprocessing
 import time
 from datetime import datetime
+from . import memory
 
 
 def worker(kind, settings, stop):
@@ -46,10 +47,16 @@ class CommandProcess:
     def is_alive(self): return self.process is not None and self.process.poll() is None
 
     @property
+    def pid(self): return None if self.process is None else self.process.pid
+
+    @property
     def exitcode(self): return None if self.process is None else self.process.poll()
 
     def terminate(self):
         if self.is_alive(): self.process.terminate()
+
+    def kill(self):
+        if self.is_alive(): self.process.kill()
 
     def join(self, timeout=None):
         import subprocess
@@ -59,7 +66,7 @@ class CommandProcess:
 
 
 class Workers:
-    def __init__(self, settings, context=None, max_restarts=3, window=600, kinds=("index", "capture"), command=None):
+    def __init__(self, settings, context=None, max_restarts=3, window=600, kinds=("index", "capture"), command=None, measure=None, limit=None):
         self.settings = settings
         self.context = context or multiprocessing.get_context("spawn")
         # `command(kind)` returns a started-on-demand CommandProcess instead of a multiprocessing one.
@@ -70,6 +77,11 @@ class Workers:
         # A worker that crashes natively (for example inside the capture library when the session
         # locks, #47) is restarted, up to max_restarts per window seconds; beyond that it stays down.
         self.max_restarts, self.window, self.restarts = max_restarts, window, []
+        # The indexer is restarted when its memory footprint passes the limit (MB), see poll().
+        self.measure = measure or memory.footprint_mb
+        self.limit = memory.limit_mb() if limit is None else limit
+        self.last_restart_reason = None
+        self.retiring = None  # monotonic time the indexer was told to stop for memory, see poll()
 
     def start(self):
         if any(p.is_alive() for p in self.processes.values()):
@@ -113,11 +125,38 @@ class Workers:
     def poll(self):
         states = {}
         for kind, p in list(self.processes.items()):
+            if kind == "index" and self.retiring is not None:
+                # Stopped for memory: wait in later polls, not here, so the menu bar never blocks; kill after 10 s.
+                # Restarting before the old process exits would fail on indexer.lock and use up the restarts.
+                if p.is_alive():
+                    if time.monotonic() - self.retiring > 10 and hasattr(p, "kill"): p.kill()
+                    states[kind] = "running"
+                    continue
+                p.join(timeout=0)
+                self.retiring = None
+                if not self.stopping and self.may_restart():
+                    self.restart(kind)
+                    self.last_restart_reason = "memory"
+                    states[kind] = "running"
+                else:
+                    states[kind] = "failed"
+                continue
             states[kind] = "running" if p.is_alive() else "stopped" if p.exitcode == 0 else "failed"
             if not p.is_alive(): p.join(timeout=0)
             if states[kind] == "failed" and not self.stopping and self.may_restart():
                 self.restart(kind)
+                self.last_restart_reason = None
                 states[kind] = "running"
+            # Backstop for the indexer's memory still growing after the root-cause fix (#98); phys_footprint, not RSS, since RSS drops under compression and swap.
+            if kind == "index" and p.is_alive() and not self.stopping:
+                used = self.measure(getattr(p, "pid", None))
+                if used is not None and used > self.limit:
+                    if self.may_restart():
+                        p.terminate()
+                        self.retiring = time.monotonic()
+                    else:
+                        p.terminate()
+                        states[kind] = "failed"
         # A dead capture/indexer must not leave its peer running indefinitely.
         if states and not self.stopping and any(s != "running" for s in states.values()): self.stop()
         return states
