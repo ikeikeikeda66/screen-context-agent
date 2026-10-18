@@ -14,9 +14,77 @@ class Process:
     def __init__(self, **kwargs):
         self.alive = False
         self.exitcode = None
+        self.terminated = False
     def start(self): self.alive = True
     def is_alive(self): return self.alive
     def join(self, timeout=None): pass
+    def terminate(self):
+        self.terminated = True
+        if not getattr(self, "stubborn", False): self.alive = False
+    def kill(self): self.killed, self.alive = True, False
+
+
+def memory_workers(tmp_path, reading, **kwargs):
+    measured = []
+    def measure(pid):
+        measured.append(pid)
+        return reading
+    workers = Workers(Settings(tmp_path), SimpleNamespace(Event=Event, Process=Process), measure=measure, limit=2048, **kwargs)
+    workers.start()
+    return workers, measured
+
+
+def test_indexer_over_memory_limit_is_restarted(tmp_path):
+    workers, measured = memory_workers(tmp_path, 3000)
+    first = workers.processes["index"]
+    assert workers.poll() == {"index": "running", "capture": "running"}
+    assert first.terminated and workers.processes["index"] is first           # told to stop; poll() does not wait for it
+    assert workers.poll() == {"index": "running", "capture": "running"}
+    assert workers.processes["index"] is not first and workers.processes["index"].is_alive()
+    assert workers.last_restart_reason == "memory"
+    assert not workers.stop_event.signaled
+    assert measured == [None]                                                  # only the indexer is measured
+
+
+def test_indexer_that_ignores_terminate_is_killed_before_restart(tmp_path, monkeypatch):
+    import screen_context.desktop as desktop
+    clock = [1000.0]
+    monkeypatch.setattr(desktop.time, "monotonic", lambda: clock[0])
+    workers, _ = memory_workers(tmp_path, 3000)
+    first = workers.processes["index"]
+    first.stubborn = True                                                      # still draining the spool after SIGTERM
+    workers.poll()
+    clock[0] += 5
+    assert workers.poll() == {"index": "running", "capture": "running"}
+    assert workers.processes["index"] is first and not getattr(first, "killed", False)
+    clock[0] += 6
+    workers.poll()
+    assert first.killed and workers.processes["index"] is first                # killed; the restart waits for the next poll
+    workers.poll()
+    assert workers.processes["index"] is not first and workers.last_restart_reason == "memory"
+    assert len(workers.restarts) == 1 and not workers.stopping
+
+
+def test_indexer_under_memory_limit_is_left_alone(tmp_path):
+    workers, _ = memory_workers(tmp_path, 1000)
+    index = workers.processes["index"]
+    assert workers.poll() == {"index": "running", "capture": "running"}
+    assert not index.terminated and workers.processes["index"] is index and workers.last_restart_reason is None
+
+
+def test_unknown_memory_reading_is_left_alone(tmp_path):
+    workers, _ = memory_workers(tmp_path, None)
+    index = workers.processes["index"]
+    assert workers.poll() == {"index": "running", "capture": "running"}
+    assert not index.terminated and workers.processes["index"] is index and workers.last_restart_reason is None
+
+
+def test_memory_limit_without_restarts_left_fails_the_indexer_and_stops_peer(tmp_path):
+    workers, _ = memory_workers(tmp_path, 3000, max_restarts=0)
+    index = workers.processes["index"]
+    assert workers.poll() == {"index": "failed", "capture": "running"}
+    assert index.terminated and workers.stop_event.signaled and workers.stopping
+    assert workers.last_restart_reason is None
 
 
 def test_worker_failure_stops_peer_and_prevents_double_start(tmp_path):

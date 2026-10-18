@@ -1,4 +1,5 @@
 """A long-lived NSWorkspace cache must consume application-activation events."""
+import threading
 from types import SimpleNamespace
 import pytest
 
@@ -6,6 +7,47 @@ pytest.importorskip("AppKit")
 from screen_context.platforms import macos
 from screen_context.config import DEFAULT_POLICY
 from screen_context.privacy import denied
+
+
+def fake_objc(log):
+    """Stands in for PyObjC's autorelease_pool; records enter/exit around the ObjC calls made inside it."""
+    class Pool:
+        def __enter__(self): log.append("enter")
+        def __exit__(self, *_): log.append("exit")
+    return SimpleNamespace(autorelease_pool=lambda: Pool())
+
+
+def test_foreground_runs_inside_an_autorelease_pool(monkeypatch):
+    log = []
+    monkeypatch.setattr(macos, "objc", fake_objc(log))
+    class Workspace:
+        def frontmostApplication(self):
+            log.append("workspace")
+            return None
+    monkeypatch.setattr(macos, "NSWorkspace", SimpleNamespace(sharedWorkspace=lambda: Workspace()))
+    monkeypatch.setattr(macos, "NSRunLoop", SimpleNamespace(currentRunLoop=lambda: SimpleNamespace(runUntilDate_=lambda _: log.append("runloop"))))
+    monkeypatch.setattr(macos, "NSDate", SimpleNamespace(dateWithTimeIntervalSinceNow_=lambda _: None))
+    adapter = macos.Backend.__new__(macos.Backend)
+    adapter.foreground()
+    assert log == ["enter", "runloop", "workspace", "exit"]
+
+
+def test_cocoa_stop_wait_drains_the_pool_on_each_pass(monkeypatch):
+    from screen_context import mac_app
+    log = []
+    monkeypatch.setattr(mac_app, "objc", fake_objc(log))
+    controller = SimpleNamespace(stop=threading.Event(), refresh=lambda: log.append("refresh"))
+    class App:
+        def nextEventMatchingMask_untilDate_inMode_dequeue_(self, *_):
+            log.append("event")
+            return None
+        def updateWindows(self):
+            log.append("update")
+            controller.stop.set()   # end the loop after one pass
+    monkeypatch.setattr(mac_app, "NSApplication", SimpleNamespace(sharedApplication=lambda: App()))
+    monkeypatch.setattr(mac_app, "NSDate", SimpleNamespace(dateWithTimeIntervalSinceNow_=lambda _: None))
+    assert mac_app.CocoaStop(controller).wait(5) is True
+    assert log == ["enter", "event", "update", "exit", "enter", "refresh", "exit"]
 
 
 def test_foreground_tracks_switches_in_a_long_lived_process(monkeypatch):
