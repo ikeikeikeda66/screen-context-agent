@@ -2,9 +2,9 @@
 import time
 import threading
 import objc
-from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny
-from Foundation import NSObject, NSDate, NSDefaultRunLoopMode
-from . import launch, quick, reauth
+from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSAlert, NSAlertSecondButtonReturn, NSEventMaskAny, NSButton, NSStackView, NSWorkspace, NSLayoutAttributeLeading
+from Foundation import NSObject, NSDate, NSDefaultRunLoopMode, NSURL
+from . import launch, onboarding, quick, reauth
 from .config import Settings
 from .i18n import CHOICES, auth, interval_label, resolve, t
 
@@ -63,6 +63,15 @@ class MenuController(NSObject):
         except Exception as error:
             self.showError(t("error.purge", lang, error=type(error).__name__))
 
+    def connectClient_(self, sender):
+        """Offer the installed AI assistants again (the first-run step "clients"), e.g. after installing one later."""
+        lang = self.lang()
+        try:
+            text = onboarding.connect_clients(self.settings, SetupDialogs(), lang)
+            if text: self.showError(text)
+        except Exception as error:
+            self.showError(t("error.connect", lang, error=type(error).__name__))
+
     def loginToggle_(self, sender):
         """Start at login through the app's own login item (#34)."""
         lang = self.lang()
@@ -99,6 +108,7 @@ class MenuController(NSObject):
         self.interval_parent.setTitle_(t("menu.interval", lang))
         self.language_parent.setTitle_(t("menu.language", lang))
         self.quit_item.setTitle_(t("menu.quit", lang))
+        self.connect_item.setTitle_(t("menu.connect", lang))
         self.login_item.setTitle_(t("menu.login", lang))
         self.login_item.setEnabled_(self.login is not None)
         self.login_item.setState_(int(launch.login_enabled(self.login)))
@@ -115,6 +125,53 @@ class MenuController(NSObject):
             choice = CHOICES[item.tag()]
             item.setTitle_(t("language." + choice, lang))
             item.setState_(int(choice == saved))
+
+
+SCREEN_RECORDING_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+
+
+class SetupDialogs:
+    """The dialogs of onboarding.run (first-run guide). Plain object: onboarding.py never imports AppKit."""
+    def _alert(self, title, body, buttons):
+        alert = NSAlert.alloc().init()
+        alert.setMessageText_(title)
+        alert.setInformativeText_(body)
+        for button in buttons: alert.addButtonWithTitle_(button)   # first button: the default (Return)
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        return alert
+
+    def permission(self, lang):
+        alert = self._alert(t("setup.permission.title", lang), t("setup.permission.body", lang),
+                            (t("setup.permission.open", lang), t("setup.permission.quit", lang)))
+        return alert.runModal() != NSAlertSecondButtonReturn
+
+    def error(self, text):
+        self._alert(text, "", ()).runModal()                 # no button given: AppKit shows its own default OK
+
+    def report(self, text, lang):
+        self._alert(t("setup.report.title", lang), text, ()).runModal()   # short title; the long text goes in the body
+
+    def choose(self, options, lang):
+        """Checkboxes, all off. Returns the ids of the ticked ones; none when the user skips."""
+        alert = self._alert(t("setup.clients.title", lang), t("setup.clients.body", lang),
+                            (t("setup.clients.connect", lang), t("setup.clients.skip", lang)))
+        boxes = [NSButton.checkboxWithTitle_target_action_(name, None, None) for _, name in options]
+        for box in boxes: box.setState_(0)
+        stack = NSStackView.stackViewWithViews_(boxes)
+        stack.setOrientation_(1)            # NSUserInterfaceLayoutOrientationVertical
+        stack.setAlignment_(NSLayoutAttributeLeading)
+        stack.setSpacing_(6)
+        stack.setFrameSize_((300, 24 * len(boxes)))
+        alert.setAccessoryView_(stack)
+        if alert.runModal() == NSAlertSecondButtonReturn: return []
+        return [client for (client, _), box in zip(options, boxes) if int(box.state()) == 1]
+
+
+def screen_recording():
+    """(preflight, request, open_settings) for the first-run guide. The only place that asks macOS about Screen Recording."""
+    import Quartz
+    return (Quartz.CGPreflightScreenCaptureAccess, Quartz.CGRequestScreenCaptureAccess,
+            lambda: NSWorkspace.sharedWorkspace().openURL_(NSURL.URLWithString_(SCREEN_RECORDING_PANE)))
 
 
 class CocoaStop:
@@ -154,9 +211,19 @@ def main():
     import signal
     from .capture import run
     from .locking import lock
+    from .platforms.macos import ScreenRecordingDenied
     app = NSApplication.sharedApplication()
     settings = Settings.environment()
     settings.prepare()
+    lang = resolve(settings)
+    # First run (permission, init, assistants): before the status item and before capture.lock, so nothing is captured meanwhile.
+    preflight, request, open_settings = screen_recording()
+    try:
+        if onboarding.run(settings, SetupDialogs(), lang, preflight=preflight, request=request, open_settings=open_settings) == onboarding.QUIT:
+            return
+    except Exception as error:
+        SetupDialogs().error(t("error.start", lang, error=type(error).__name__))   # a dialog that failed must not end in a traceback
+        return
     controller = MenuController.alloc().init()
     controller.settings = settings
     controller.stop = threading.Event()
@@ -178,6 +245,9 @@ def main():
     controller.indexer_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", None, "")
     controller.indexer_item.setEnabled_(False)
     menu.addItem_(controller.indexer_item)
+    controller.connect_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "connectClient:", "")
+    controller.connect_item.setTarget_(controller)
+    menu.addItem_(controller.connect_item)
     controller.login = launch.login_service()
     controller.login_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "loginToggle:", "")
     controller.login_item.setTarget_(controller)
@@ -196,7 +266,7 @@ def main():
             start_indexer(controller, settings)
             run(settings, stop=CocoaStop(controller))
     except Exception as error:
-        controller.showError(t("error.start", controller.lang(), error=type(error).__name__))
+        controller.showError(t("setup.permission.lost" if isinstance(error, ScreenRecordingDenied) else "error.start", controller.lang(), error=type(error).__name__))
     finally:
         stop_indexer(controller)
         NSStatusBar.systemStatusBar().removeStatusItem_(controller.item)

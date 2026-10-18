@@ -71,3 +71,14 @@ def test_load_secure_input_raises_when_carbon_cannot_be_loaded(monkeypatch):
     monkeypatch.setattr(ctypes.cdll, "LoadLibrary", unavailable)
     with pytest.raises(OSError):
         macos.load_secure_input()
+
+
+def test_missing_screen_recording_raises_the_specific_error(monkeypatch):
+    class NoApp:
+        @staticmethod
+        def sharedApplication(): return None
+    monkeypatch.setattr(macos, "NSApplication", NoApp)                       # no AppKit call here
+    monkeypatch.setattr(macos.Quartz, "CGPreflightScreenCaptureAccess", lambda: False)   # fake: the TCC check is never asked for real
+    with pytest.raises(macos.ScreenRecordingDenied):
+        macos.Backend()
+    assert issubclass(macos.ScreenRecordingDenied, PermissionError)

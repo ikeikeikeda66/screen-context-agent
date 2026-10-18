@@ -17,11 +17,15 @@ def load_secure_input():
     return function
 
 
+class ScreenRecordingDenied(PermissionError):
+    """Screen Recording is not allowed for the app. Other PermissionErrors are not this (mac_app tells them apart)."""
+
+
 class Backend:
     def __init__(self):
         NSApplication.sharedApplication()
         if not Quartz.CGPreflightScreenCaptureAccess():
-            raise PermissionError("Grant Screen Recording to ScreenContext.app, then relaunch with open")
+            raise ScreenRecordingDenied("Grant Screen Recording to ScreenContext.app, then relaunch with open")
         try: self._secure_input = load_secure_input()
         except (OSError, AttributeError) as error: self._secure_input = error  # secure_input() raises it, and capture treats that as on
 
