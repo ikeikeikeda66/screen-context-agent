@@ -22,12 +22,17 @@ def native_ocr(image):
     import sys
     if sys.platform == "darwin":
         from .platforms import vision
+        import objc
         import Quartz
         from Foundation import NSData
-        buf = io.BytesIO(); image.save(buf, "PNG"); data = buf.getvalue()
-        src = Quartz.CGImageSourceCreateWithData(NSData.dataWithBytes_length_(data, len(data)), None)
-        cg = Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
-        return merge_lines(vision.recognize(cg) + vision.recognize_tiled(cg))
+        # The CLI has no run loop, so Vision/CGImage autorelease objects pile up on every OCR call (#98).
+        with objc.autorelease_pool():
+            buf = io.BytesIO(); image.save(buf, "PNG"); data = buf.getvalue()
+            src = Quartz.CGImageSourceCreateWithData(NSData.dataWithBytes_length_(data, len(data)), None)
+            if src is None: raise RuntimeError("Image: failed to import")
+            cg = Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
+            if cg is None: raise RuntimeError("Image: failed to import")
+            return merge_lines(vision.recognize(cg) + vision.recognize_tiled(cg))
     if sys.platform == "win32":
         from .platforms.windows import recognize
         return recognize(image)

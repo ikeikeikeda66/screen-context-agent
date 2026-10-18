@@ -127,11 +127,14 @@ class CocoaStop:
     def wait(self, seconds):
         deadline = time.monotonic() + seconds
         while not self.is_set() and time.monotonic() < deadline:
-            app = NSApplication.sharedApplication()
-            event = app.nextEventMatchingMask_untilDate_inMode_dequeue_(NSEventMaskAny, NSDate.dateWithTimeIntervalSinceNow_(0.1), NSDefaultRunLoopMode, True)
-            if event is not None: app.sendEvent_(event)
-            app.updateWindows()
-        self.controller.refresh()
+            # NSApp.run() is not used, so this loop must empty the autorelease pool itself (#98).
+            with objc.autorelease_pool():
+                app = NSApplication.sharedApplication()
+                event = app.nextEventMatchingMask_untilDate_inMode_dequeue_(NSEventMaskAny, NSDate.dateWithTimeIntervalSinceNow_(0.1), NSDefaultRunLoopMode, True)
+                if event is not None: app.sendEvent_(event)
+                app.updateWindows()
+        with objc.autorelease_pool():
+            self.controller.refresh()
         return self.is_set()
 
 
