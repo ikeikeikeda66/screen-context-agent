@@ -351,3 +351,35 @@ def test_dry_run_action_and_unreadable_reason_are_translated():
         assert t("cfg.reason.unreadable", lang, client="cursor") != "cfg.reason.unreadable"
     assert all(word in t("cfg.reason.unreadable", "en", client="cursor") for word in ("duplicate", "BOM", "UTF-8"))
     assert all(word in t("cfg.reason.unreadable", "ja", client="cursor") for word in ("重複", "BOM", "UTF-8"))
+
+
+def test_remove_keeps_the_entry_of_another_data_folder(settings, fake_home, tmp_path):
+    path = target(fake_home, ".cursor/mcp.json")
+    other = str(tmp_path / "elsewhere")
+    path.write_text(json.dumps({"mcpServers": {"screen-context": {"command": "x", "env": {"SCREEN_CONTEXT_HOME": other, access.TOKEN_ENV: "sc_old"}}}}))
+    before = path.read_bytes()
+    plan = cc.remove_plan("cursor", settings=settings)
+    assert plan.action == "conflict" and plan.reason == "other_home" and plan.other_home == other and plan.related == []
+    assert cc.remove(plan)["action"] == "conflict" and path.read_bytes() == before
+    assert cc.remove_plan("cursor").action == "remove"          # without settings the old behaviour stays
+
+
+def test_remove_takes_out_its_own_folder_and_offers_only_its_own_related(settings, fake_home, tmp_path):
+    path = target(fake_home, ".cursor/mcp.json")
+    other = str(tmp_path / "elsewhere")
+    mine = {"command": "x", "env": {"SCREEN_CONTEXT_HOME": str(settings.root), access.TOKEN_ENV: "sc_a"}}
+    theirs = {"command": "y", "env": {"SCREEN_CONTEXT_HOME": other, access.TOKEN_ENV: "sc_b"}}
+    path.write_text(json.dumps({"mcpServers": {"screen-context": mine, "sc-other": theirs, "sc-work": mine}}))
+    plan = cc.remove_plan("cursor", settings=settings)
+    assert plan.action == "remove" and plan.related == ["sc-work"]
+    cc.remove(plan)
+    assert list(json.loads(path.read_text())["mcpServers"]) == ["sc-other", "sc-work"]     # related stays unless chosen
+
+
+def test_null_screen_context_entry_is_absent(settings, fake_home):
+    path = target(fake_home, ".cursor/mcp.json")
+    text = json.dumps({"mcpServers": {"screen-context": None, "a": {"command": "a"}}}, indent=2)
+    path.write_text(text)
+    plan = cc.remove_plan("cursor")
+    assert plan.action == "absent"
+    assert cc.remove(plan)["backup"] is None and path.read_text() == text

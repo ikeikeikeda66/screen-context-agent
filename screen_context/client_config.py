@@ -50,6 +50,7 @@ class Change:
     after: str = ""                # the entry after the change (secrets masked)
     manual: str = ""               # manual: the snippet with a placeholder token
     related: list = field(default_factory=list)   # remove_plan: other server names that look like ScreenContext
+    names: tuple = ()              # remove_plan: related names that will be removed together with KEY
     other_home: str = ""           # conflict: the SCREEN_CONTEXT_HOME the existing entry points at
     reuse_token: str = ""          # the existing token that is still valid (never printed)
     previous_owner: str = ""       # the file held a live token of another client name; that name (the token is never printed)
@@ -118,7 +119,7 @@ def _json_load(text):
     return data
 
 
-def _json_edit(text, container, entry, remove):
+def _json_edit(text, container, entry, remove, names=()):
     """-> (new text, existing entry or None). Same text back when nothing changes."""
     eol = _eol(text)
     data = _json_load(text)
@@ -127,8 +128,10 @@ def _json_edit(text, container, entry, remove):
     if not isinstance(servers, dict): raise _Manual("unsupported")
     old = servers.get(KEY)
     if remove:
-        if KEY not in servers: return text, None
-        del servers[KEY]; data[container] = servers
+        gone = [n for n in (KEY, *names) if n in servers]
+        if not gone: return text, None
+        for n in gone: del servers[n]
+        data[container] = servers
     else:
         merged = _merge(old, entry)
         if merged == old: return text, old
@@ -138,7 +141,7 @@ def _json_edit(text, container, entry, remove):
     return out.replace("\n", eol), old
 
 
-def _toml_edit(text, entry, remove):
+def _toml_edit(text, entry, remove, names=()):
     import tomlkit
     from tomlkit.exceptions import TOMLKitError
     from tomlkit.items import Table, InlineTable
@@ -150,7 +153,8 @@ def _toml_edit(text, entry, remove):
         if tomlkit.dumps(doc) != text: raise _Manual("unsupported")
     except (tomllib.TOMLDecodeError, TOMLKitError): raise _Manual("unreadable")
     old = (before.get("mcp_servers") or {}).get(KEY) if isinstance(before.get("mcp_servers", {}), dict) else None
-    if remove and old is None: return original, None
+    present = [n for n in (KEY, *names) if isinstance(before.get("mcp_servers"), dict) and n in before["mcp_servers"]]
+    if remove and not present: return original, None
     if not remove:
         want = _merge(old, entry)
         if want == old: return original, old
@@ -158,7 +162,7 @@ def _toml_edit(text, entry, remove):
         servers = doc.get("mcp_servers")
         if remove:
             if not isinstance(servers, Table): raise _Manual("unsupported")
-            del servers[KEY]
+            for n in present: del servers[n]
         else:
             if servers is None:
                 servers = tomlkit.table(True); doc["mcp_servers"] = servers
@@ -178,7 +182,7 @@ def _toml_edit(text, entry, remove):
     def rest(data):
         data = copy.deepcopy(data); servers = data.get("mcp_servers")
         if isinstance(servers, dict):
-            servers.pop(KEY, None)
+            for n in (KEY, *names): servers.pop(n, None)
             if not servers: del data["mcp_servers"]
         return data
     got = (after.get("mcp_servers") or {}).get(KEY)
@@ -186,8 +190,8 @@ def _toml_edit(text, entry, remove):
     return out.replace("\n", eol), old
 
 
-def _edit(fmt, container, text, entry, remove=False):
-    return _json_edit(text, container, entry, remove) if fmt == "json" else _toml_edit(text, entry, remove)
+def _edit(fmt, container, text, entry, remove=False, names=()):
+    return _json_edit(text, container, entry, remove, names) if fmt == "json" else _toml_edit(text, entry, remove, names)
 
 
 def _locate(client, home):
@@ -255,32 +259,45 @@ def plan(settings, client, home=None, name=None, profile="standard", command=Non
     return change
 
 
-def remove_plan(client, home=None, settings=None):
-    """Decide what taking the screen-context entry out would do. Other servers are left alone."""
-    change = Change(client, KEY, "manual", settings=settings)
+def remove_plan(client, home=None, settings=None, also=()):
+    """Decide what taking the screen-context entry out would do. Other servers are left alone, except the
+    names in `also` (related entries the user chose; a name that is not in the file is ignored)."""
+    change = Change(client, KEY, "manual", settings=settings, names=tuple(also))
     try:
         path, fmt, container = _locate(client, home)
         change.path, change.format, change.container = path, fmt, container
         raw = _read(path); text = _text(raw); change.original = raw
         if raw is None: change.action = "absent"; return change
-        new_text, old = _edit(fmt, container, text, None, remove=True)
+        new_text, old = _edit(fmt, container, text, None, remove=True, names=change.names)
         change.before = _show(fmt, old)
-        change.related = _related(fmt, container, text)
-        change.action = "remove" if old is not None else "absent"; change.reason = ""
+        other = _other_home(old, settings)
+        if other:   # the entry belongs to another data folder: left alone, related entries too
+            change.action, change.reason, change.other_home = "conflict", "other_home", other
+            return change
+        change.related = _related(fmt, container, text, settings)
+        removes_key = old is not None or bool(change.names)   # a null entry is absent
+        change.action = "remove" if new_text != text and removes_key else "absent"; change.reason = ""
     except _Manual as why:
         change.action, change.reason = "manual", str(why)
     return change
 
 
-def _related(fmt, container, text):
-    """Other server names whose entry looks like a ScreenContext one (for the user to choose)."""
+def _other_home(entry, settings):
+    """The SCREEN_CONTEXT_HOME of `entry` when it is not the data folder of `settings`, else ""."""
+    env = entry.get("env") if isinstance(entry, dict) and isinstance(entry.get("env"), dict) else {}
+    home = env.get("SCREEN_CONTEXT_HOME")
+    return str(home) if home and settings is not None and not _same_home(home, settings.root) else ""
+
+
+def _related(fmt, container, text, settings=None):
+    """Other server names whose entry looks like a ScreenContext one of the same data folder (for the user to choose)."""
     try: servers = (_json_load(text) if fmt == "json" else tomllib.loads(text)).get(container) or {}
     except (_Manual, tomllib.TOMLDecodeError): return []
     def ours(entry):
         if not isinstance(entry, dict): return False
         env = entry.get("env") if isinstance(entry.get("env"), dict) else {}
         return access.TOKEN_ENV in env or "SCREEN_CONTEXT_HOME" in env or "screen_context.cli" in " ".join(map(str, entry.get("args") or []))
-    return [k for k, v in servers.items() if k != KEY and ours(v)] if isinstance(servers, dict) else []
+    return [k for k, v in servers.items() if k != KEY and ours(v) and not _other_home(v, settings)] if isinstance(servers, dict) else []
 
 
 # ---- writing -------------------------------------------------------------------------------------------
@@ -341,7 +358,7 @@ def _commit(change, remove=False):
     text = _text(raw)
     issued = False
     try:
-        if remove: new_text, _ = _edit(change.format, change.container, text, None, remove=True)
+        if remove: new_text, _ = _edit(change.format, change.container, text, None, remove=True, names=change.names)
         else:
             token = change.reuse_token
             if not token: token = access.issue(change.settings, change.name, change.profile); issued = True
