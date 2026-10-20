@@ -23,6 +23,7 @@ from screen_context.config import Settings
 from screen_context.store import initialize, connect
 import _cffi_backend
 import sqlcipher3.dbapi2
+import tomlkit
 key=b't'*32
 assert unseal(seal(b'synthetic',key),key)==b'synthetic'
 cfg=Settings.environment()

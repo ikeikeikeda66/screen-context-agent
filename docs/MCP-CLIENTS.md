@@ -32,6 +32,26 @@ When you run from a source checkout, the command is `<checkout>/.venv/bin/python
 
 Restart the client after you change its configuration.
 
+## Write the entry into the client (macOS)
+
+```sh
+screen-context mcp-config --client <name> --write [--dry-run] [--force]
+```
+
+`--write` adds the `screen-context` entry to the client's own configuration file instead of printing it. It supports `claude-desktop`, `cursor`, `vscode` (default profile), `gemini` and `codex`. Other clients are set up by hand from the printed output.
+
+- Other servers and their permissions are kept. For Codex, comments and the layout of `config.toml` are kept too (through the `tomlkit` dependency).
+- Before the file is replaced, its current content is copied to `<file>.screen-context-YYYYmmdd-HHMMSS.bak` (mode 0600). The newest 5 backups are kept.
+- If the file already holds a still-valid token for this client, that token is reused. Otherwise a new token is issued and the old one stops working.
+- If the file has a `screen-context` entry that points at another data folder, nothing is written. Use `--force` to replace it.
+- If the existing `screen-context` entry is an HTTP one (`url`, for the Streamable HTTP transport), nothing is written either. `--force` is required to replace it with the local command entry.
+- A JSON file is re-indented with 2 spaces when it is rewritten, so its original indentation is not kept. A file that uses CRLF line endings keeps them; a file that mixes CRLF and LF is not changed.
+- If the file held a still-valid token of another client name, that token is not reused. The output names that client and shows `clients revoke NAME` for it, in case you no longer need it.
+- `--dry-run` only shows the change. It writes nothing and issues no token. Secrets are masked in the output.
+- A file that cannot be edited safely (JSON with comments, a syntax error, an unusual layout) is not changed. The entry is printed instead, to paste by hand.
+- A client whose configuration folder does not exist is reported as not installed. Start the client once, then run the command again.
+- The token is written into the file. Do not commit that file or put it in a synced folder.
+
 ## Per-client notes
 
 | Client | Where the entry goes |

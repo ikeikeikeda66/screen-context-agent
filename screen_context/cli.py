@@ -29,15 +29,23 @@ def _main():
     ui = sub.add_parser("ui", help="Open the local web UI (127.0.0.1, one-time link)")
     ui.add_argument("--no-browser", action="store_true", help="only print the link")
     from .clients import CLIENTS
-    config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client")
+    config = sub.add_parser("mcp-config", help="Print the MCP server entry for a client, or write it into the client's configuration file (--write)")
     config.add_argument("--client", choices=list(CLIENTS), default="generic"); config.add_argument("--profile", choices=profiles, default="standard")
     config.add_argument("--name", help="Name for this client's token (default: the client). Running again replaces its token.")
+    config.add_argument("--write", action="store_true", help="add the entry to the client's own configuration file (a backup is kept)")
+    config.add_argument("--dry-run", action="store_true", help="with --write: show what would change and write nothing")
+    config.add_argument("--force", action="store_true", help="with --write: replace an existing entry that points at another data folder or is an HTTP (url) entry")
     clients = sub.add_parser("clients", help="List or revoke MCP client tokens")
     clients.add_argument("action", choices=["list", "approve", "revoke"]); clients.add_argument("name", nargs="?")
     from .i18n import CHOICES
     language = sub.add_parser("language", help="Show or set the UI language"); language.add_argument("value", nargs="?", choices=CHOICES)
     wipe = sub.add_parser("wipe", help="Delete the key, then the whole data folder (no undo)")
     wipe.add_argument("--confirm", help="type ERASE to skip the prompt")
+    uninstall_cmd = sub.add_parser("uninstall", help="Remove ScreenContext from AI clients, Login Items and launchd; --wipe also erases the data")
+    uninstall_cmd.add_argument("--wipe", action="store_true", help="also delete the key and the whole data folder (no undo)")
+    uninstall_cmd.add_argument("--include", action="append", default=[], metavar="NAME", help="also remove this related entry listed by --dry-run (repeat for more)")
+    uninstall_cmd.add_argument("--dry-run", action="store_true", help="show what would happen and change nothing")
+    uninstall_cmd.add_argument("--confirm", help="type UNINSTALL (ERASE with --wipe) to skip the prompt")
     for cmd in ("backup", "restore"):
         p = sub.add_parser(cmd, help="Encrypted archive protected by a passphrase" if cmd == "backup" else "Restore an archive made by backup")
         p.add_argument("file"); p.add_argument("--passphrase-file", help="read the passphrase from this file (for scripts)")
@@ -110,6 +118,22 @@ def _main():
         try: result = lifecycle.wipe(settings)
         except store.SchemaMismatch: raise
         except (RuntimeError, FileNotFoundError) as error: parser.error(str(error))
+    elif args.command == "uninstall":
+        from . import uninstall
+        from .i18n import t
+        try: plan = uninstall.plan(settings, wipe=args.wipe, include_related=args.include)
+        except ValueError as error: parser.error(str(error))
+        if args.dry_run: result = uninstall.describe(plan)
+        else:
+            word = uninstall.confirmation_word(plan)
+            title, body = uninstall.confirmation(plan)
+            print(title + "\n\n" + body, file=sys.stderr)
+            try: answer = args.confirm or input(t("uninstall.prompt", "en", word=word))
+            except EOFError: parser.error("not confirmed; nothing was changed")     # no terminal input (stdin closed)
+            if answer != word: parser.error("not confirmed; nothing was changed")
+            done = uninstall.apply(plan)
+            result = {"ok": done.ok, "message": uninstall.result_message(done), "steps": done.steps, "manual": done.manual, "wiped": done.wiped}
+            if not done.ok: print(json.dumps(result, ensure_ascii=False)); sys.exit(1)
     elif args.command in ("backup", "restore"):
         from pathlib import Path
         from getpass import getpass
@@ -210,10 +234,37 @@ def _main():
         from .access import issue
         from .clients import CLIENTS, cli_command, render
         from .service import profile_name
+        if (args.dry_run or args.force) and not args.write: parser.error("--dry-run and --force need --write")
         if not settings.db.exists(): parser.error("run screen-context init first")
         profile = profile_name(args.profile)
-        token = issue(settings, args.name or args.client, profile)
         name = args.name or args.client
+        if args.write:
+            from . import client_config
+            from .i18n import resolve, t
+            lang = resolve(settings)
+            change = client_config.plan(settings, args.client, name=name, profile=profile, force=args.force)
+            if change.action == "conflict":
+                key = "cfg.conflict_http" if change.reason == "http" else "cfg.conflict"
+                print(t(key, lang, path=change.path, home=change.other_home), file=sys.stderr); sys.exit(2)
+            if change.action == "manual":
+                print(t("cfg.reason." + change.reason, lang, client=args.client) + " " + t("cfg.by_hand", lang), file=sys.stderr)
+                if args.dry_run: print(change.manual); return  # placeholder token; nothing was issued
+            else:
+                if args.dry_run or change.action == "unchanged":
+                    if change.action == "unchanged": print(t("cfg.unchanged", lang, path=change.path)); return
+                    print(t("cfg.dry_run", lang, path=change.path, action=t("cfg.action." + change.action, lang)))
+                    import difflib
+                    print("\n".join(difflib.unified_diff(change.before.splitlines(), change.after.splitlines(), "before", "after", lineterm="")))
+                    return
+                try: result = client_config.apply(change)
+                except (RuntimeError, OSError) as why:
+                    print(t("cfg.failed", lang, path=change.path, reason=type(why).__name__), file=sys.stderr); sys.exit(1)
+                print(t("cfg." + change.action, lang, path=result["path"]))
+                if result["backup"]: print(t("cfg.backup", lang, path=result["backup"]))
+                if change.previous_owner: print(t("cfg.previous_owner", lang, owner=change.previous_owner))
+                print(t("cfg.next", lang, client=args.client, name=name))
+                return
+        token = issue(settings, name, profile)
         print(f"Add to: {CLIENTS[args.client]}. This replaces any earlier token for {name}. "
               f"On its first call, approve {name} in the ScreenContext app (or run: screen-context clients approve {name}).", file=sys.stderr)
         print(render(args.client, cli_command(), settings, token, profile)); return

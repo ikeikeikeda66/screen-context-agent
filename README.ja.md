@@ -147,6 +147,8 @@ Today の横のタブから、メンテナンスの操作も同じ画面で行�
 2. 新しいトークンが初めて使われたとき、メニューバーアプリ（Windows では操作ウィンドウ）が、そのクライアントに画面履歴の閲覧を許可するかを確認します。アプリを起動しておくか、ターミナルで `screen-context clients approve NAME` を実行して承認します。「許可しない」を選んだトークンは以後使えません。
 3. `screen-context clients list` でクライアントの一覧と最後に履歴を読んだ時刻を確認できます。`clients revoke NAME` で次の呼び出しから接続を止められます。`screen-context audit list` で、各クライアントが何を要求し、何を受け取ったかを確認できます。
 
+macOS では `mcp-config --client <name> --write` で、Claude Desktop・Cursor・VS Code・Gemini CLI・Codex の設定ファイルに項目を直接書き込めます。書き換え前にバックアップを作ります。トークンはファイルに入るため、コミットや同期フォルダには置かないでください。
+
 クライアント別の設定先と HTTP 接続は [docs/MCP-CLIENTS.md](docs/MCP-CLIENTS.md)（英語）を参照してください。
 
 [ActivityWatch](https://activitywatch.net/) と組み合わせる例は [examples/activitywatch](examples/activitywatch/README.ja.md) にあります。ActivityWatch のウィンドウ履歴から選んだ時間帯について、ScreenContext が記録した画面を参照します。自分で実行するコマンドで、ActivityWatch のデータは読むだけです。
