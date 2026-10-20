@@ -28,7 +28,7 @@ screen-context mcp-config --client <name> [--profile standard|full]
 - Entries created before this version have no token and the server refuses to start with them. Run `mcp-config` again and replace the entry.
 - Limit: the token sits in the client's configuration file. Tokens identify and gate clients; they do not stop malware running as your user.
 
-When you run from a source checkout, the command is `<checkout>/.venv/bin/python -m screen_context.cli`. When you run the command from the built macOS app (`ScreenContext.app/Contents/MacOS/ScreenContext mcp-config ...`), the entry points at the app.
+When you run from a source checkout, the command is `<checkout>/.venv/bin/python -m screen_context.cli`. When you run the command from the built macOS app, use `ScreenContext.app/Contents/MacOS/screen-context mcp-config ...`. That name always runs the command line, never the menu bar app; with no arguments it shows the help. `mcp-config` then points the client at that same file. If you move the app, run `mcp-config` again.
 
 Restart the client after you change its configuration.
 
