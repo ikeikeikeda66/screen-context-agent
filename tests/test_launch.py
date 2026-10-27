@@ -98,6 +98,35 @@ def test_the_indexer_cli_exits_cleanly_on_sigterm(settings, tmp_path):
     assert process.exitcode == 0, (tmp_path / "indexer.log").read_text()
 
 
+def test_indexer_cli_waits_for_schema_and_resumes(settings, tmp_path):
+    import sqlite3
+    from screen_context import store
+    with sqlite3.connect(settings.db) as db:
+        db.execute("PRAGMA user_version=3")
+    process = CommandProcess([sys.executable, "-m", "screen_context.cli", "index", "--watch"],
+                             env={**quick.child_env(settings), "PATH": "/usr/bin:/bin"}, log=tmp_path / "indexer.log")
+    status = settings.root / "index-status.json"
+    def wait_for(predicate):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if status.exists() and predicate(json.loads(status.read_text())): return
+            if not process.is_alive(): break
+            time.sleep(.1)
+        pytest.fail("indexer did not reach expected state: " + (tmp_path / "indexer.log").read_text())
+    process.start()
+    try:
+        wait_for(lambda data: data.get("status") == "schema_mismatch")
+        assert process.is_alive()
+        with sqlite3.connect(settings.db) as db:
+            db.execute(f"PRAGMA user_version={store.SCHEMA_VERSION}")
+        wait_for(lambda data: "indexed" in data)
+        assert process.is_alive()
+    finally:
+        process.terminate()
+        process.join(20)
+    assert process.exitcode == 0
+
+
 def test_workers_without_a_command_still_use_multiprocessing(tmp_path):
     from test_desktop import Event, Process
     from screen_context.config import Settings

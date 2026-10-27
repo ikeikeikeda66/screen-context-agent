@@ -104,7 +104,9 @@ class MenuController(NSObject):
         self.login_item.setState_(int(launch.login_enabled(self.login)))
         # The indexer is polled here, so a crashed one is restarted (up to 3 times in 10 minutes).
         state = self.workers.poll().get("index", "stopped") if self.workers else self.indexer_note
-        self.indexer_item.setTitle_(t("menu.indexer." + state, lang))
+        from .desktop import schema_status
+        message = schema_status(self.settings.root / "index-status.json", lang) if state == "running" else None
+        self.indexer_item.setTitle_(message or t("menu.indexer." + state, lang))
         interval = self.settings.capture_interval()
         for item in self.interval_items:
             item.setTitle_(interval_label(item.tag(), lang))
