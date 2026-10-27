@@ -108,6 +108,24 @@ def intervals(window, afk, start, end, apps=None, gap=5, min_seconds=10, limit=5
 
 # --- ScreenContext (over MCP) ---------------------------------------------------------------------
 
+class MCPToolFailure(RuntimeError):
+    """An error returned by the ScreenContext tool, suitable for the command line."""
+
+
+def run_lookup(coroutine):
+    try:
+        return asyncio.run(coroutine)
+    except ExceptionGroup as group:
+        error = group
+        while isinstance(error, ExceptionGroup) and len(error.exceptions) == 1:
+            error = error.exceptions[0]
+        if isinstance(error, MCPToolFailure):
+            raise SystemExit(" ".join(str(error).splitlines())) from None
+        raise
+    except MCPToolFailure as error:
+        raise SystemExit(" ".join(str(error).splitlines())) from None
+
+
 def references(segment, result):
     """Blocks from one get_activity_between result as references. Anything outside the segment
     would be a server bug; it is dropped rather than shown."""
@@ -146,7 +164,7 @@ def mcp_caller(command, env):
 
                 async def call(start, end, limit):
                     result = await s.call_tool("get_activity_between", {"start": start, "end": end, "limit": limit})
-                    if result.is_error: raise RuntimeError(result.content[0].text if result.content else "tool error")
+                    if result.is_error: raise MCPToolFailure(result.content[0].text if result.content else "tool error")
                     return json.loads(result.content[0].text)
                 yield call
     return session
@@ -231,7 +249,7 @@ def main(argv=None, opener=urllib.request.urlopen, caller=None, now=None):
         async with mcp_caller(shlex.split(args.server), dict(os.environ))() as call:
             return await lookup(segments, call, args.limit)
 
-    found = asyncio.run(run())
+    found = run_lookup(run())
     print(json.dumps(found, ensure_ascii=False, indent=2) if args.format == "json" else markdown(found))
     return found
 
