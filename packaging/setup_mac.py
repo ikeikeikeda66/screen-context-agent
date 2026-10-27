@@ -11,6 +11,7 @@ setup(
     name="ScreenContext",
     app=["mac_main.py"],
     options={"py2app": {
+        "iconfile": str(Path(__file__).resolve().parent / "assets" / "ScreenContext.icns"),
         "argv_emulation": False,
         "excludes": ["tkinter", "_tkinter", "pytest", "tests"],
         "includes": ["_cffi_backend", "sqlcipher3.dbapi2", "keyring.backends.macOS"],
