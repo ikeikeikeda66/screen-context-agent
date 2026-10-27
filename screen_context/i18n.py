@@ -94,6 +94,8 @@ MESSAGES = {
         "error.language": "Cannot save the language setting.",
         "error.start": "Cannot start or continue capture ({error}). Check the Screen Recording permission and your settings.",
         # Per-call approval dialogs
+        "current.denied": "The current screen request was denied.",
+        "current.timeout": "The current screen request timed out before an approved capture was ready.",
         "approve.title": "Send the current window image to an AI client?",
         "approve.body": "This allows only the current request from an MCP client. The image contains whatever is shown in the window.",
         "approve.deny": "Don't Allow",
@@ -433,6 +435,8 @@ MESSAGES = {
         "error.interval": "撮影間隔を保存できません。",
         "error.language": "言語設定を保存できません。",
         "error.start": "撮影を開始・継続できません（{error}）。画面収録の許可と設定を確認してください。",
+        "current.denied": "現在の画面のリクエストは拒否されました。",
+        "current.timeout": "承認された画面の準備ができる前にリクエストが時間切れになりました。",
         "approve.title": "現在のウィンドウ画像をAIクライアントへ渡しますか？",
         "approve.body": "MCPクライアントからの今回の要求だけを許可します。画像には表示中の情報が含まれます。",
         "approve.deny": "許可しない",

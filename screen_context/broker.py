@@ -8,6 +8,14 @@ from .crypto import atomic_write
 from .privacy import denied
 
 
+class CurrentScreenDenied(PermissionError):
+    """The current-screen request was not approved."""
+
+
+class CurrentScreenTimeout(TimeoutError):
+    """No approved, indexed capture arrived before the deadline."""
+
+
 def request_current(service, timeout=90):
     service.require_full()
     settings = service.settings
@@ -22,7 +30,7 @@ def request_current(service, timeout=90):
                 result = json.loads(reply.read_text())
                 if result.get("status") != "approved":
                     service.finish([], "get_current_screen", {"status": "denied"})
-                    raise PermissionError("Local approval denied or capture excluded")
+                    raise CurrentScreenDenied()
                 from . import store
                 with store.connect(settings, readonly=True) as con:
                     ready = con.execute("SELECT 1 FROM frames WHERE id=?", (result["frame_id"],)).fetchone()
@@ -32,7 +40,7 @@ def request_current(service, timeout=90):
                     return data
             time.sleep(.25)
         service.finish([], "get_current_screen", {"status": "timeout"})
-        raise TimeoutError("No approved indexed capture within the deadline")
+        raise CurrentScreenTimeout()
     finally:
         path.unlink(missing_ok=True)
         reply.unlink(missing_ok=True)
