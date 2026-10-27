@@ -4,6 +4,7 @@ import asyncio
 import json
 import sys
 import time
+from datetime import datetime
 import pytest
 from test_core import settings, add
 from test_ui import world, sessions, call, opened, BASE, ORIGIN
@@ -187,10 +188,10 @@ def test_clients_page_lists_revokes_and_approves(settings, sessions):
 
 
 def test_digest_offers_exclude_links_and_deletes_one_interval(settings, sessions):
-    first = add(settings, "chrome work https://docs.example.com", app="com.google.Chrome", ts=NOW - 400)
-    add(settings, "notes", app="com.apple.Notes", ts=NOW - 300)
-    today = time.strftime("%Y-%m-%d")
-    text = page(settings, sessions, "/", date=today).text
+    noon = datetime.fromtimestamp(NOW - 86400).replace(hour=12, minute=0, second=0, microsecond=0)   # a past day, far from midnight
+    first = add(settings, "chrome work https://docs.example.com", app="com.google.Chrome", ts=noon.timestamp())
+    add(settings, "notes", app="com.apple.Notes", ts=noon.timestamp() + 100)
+    text = page(settings, sessions, "/", date=noon.strftime("%Y-%m-%d")).text
     assert "/data?kind=app&amp;value=com.google.Chrome#exclude" in text and "/data?kind=domain&amp;value=docs.example.com#exclude" in text
     import re
     button = re.search(r'data-action="purge" data-param-from="([^"]+)" data-param-to="([^"]+)" data-param-app="com.google.Chrome"', text)
