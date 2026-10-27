@@ -155,6 +155,8 @@ Per-client instructions and the HTTP transport: [docs/MCP-CLIENTS.md](docs/MCP-C
 
 With [ActivityWatch](https://activitywatch.net/): [examples/activitywatch](examples/activitywatch) looks up what ScreenContext saw during a time range you pick from ActivityWatch's window history. It is a command you run, and it only reads from ActivityWatch.
 
+To hand an assistant what you saw earlier, [examples/reviewed-context](examples/reviewed-context) looks up a range you give, asks you to review each item (source app and observation time included), and prints only the ones you approve. Nothing is saved or sent automatically.
+
 ### Profiles and tools
 
 Each server process runs with one fixed profile. A tool call cannot raise it, and a client's token caps the profile it may use.
