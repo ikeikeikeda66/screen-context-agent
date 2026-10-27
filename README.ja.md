@@ -153,6 +153,8 @@ macOS では `mcp-config --client <name> --write` で、Claude Desktop・Cursor�
 
 [ActivityWatch](https://activitywatch.net/) と組み合わせる例は [examples/activitywatch](examples/activitywatch/README.ja.md) にあります。ActivityWatch のウィンドウ履歴から選んだ時間帯について、ScreenContext が記録した画面を参照します。自分で実行するコマンドで、ActivityWatch のデータは読むだけです。
 
+以前に見た画面をアシスタントへ渡したいときは、[examples/reviewed-context](examples/reviewed-context/README.ja.md) を使います。指定した範囲を参照し、項目ごとに確認（取得元アプリと観測時刻を表示）して、承認したものだけを出力します。自動では何も保存も送信もしません。
+
 ### プロファイルとツール
 
 サーバープロセスごとにプロファイルが 1 つに固定されます。ツールの引数で変更することはできません。また、クライアントのトークンごとに使えるプロファイルの上限が決まっています。

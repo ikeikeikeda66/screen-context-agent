@@ -2,6 +2,7 @@
 
 ## Unreleased — Today view / Today ビュー
 
+- examples/reviewed-context: `reviewed_context.py` looks up a `--start`/`--end` range, shows each reference with its source app, observation time, window title and snippet, and prints only the ones you approve with `y`. It refuses to run without a terminal, has no option that skips the review, and writes and sends nothing apart from the audited MCP lookup. It follows the conditions in [redf0x1/camofox-browser#36](https://github.com/redf0x1/camofox-browser/issues/36).
 - `screen-context uninstall [--wipe] [--include NAME] [--dry-run]` removes the `screen-context` entry from supported client configs (with backups), revokes client tokens, turns off Start at Login and the old LaunchAgent, and deletes the logs; `--wipe` also destroys the key and the data folder. Exports and backups outside the data folder stay (#37).
 - `mcp-config --client <name> --write [--dry-run] [--force]` writes the entry into Claude Desktop, Cursor, VS Code, Gemini CLI or Codex config files on macOS, keeping other servers, permissions and (for Codex, via the new `tomlkit` dependency) comments; it backs up the file first, reuses a still-valid token, and falls back to printing the entry when it cannot edit safely (#35).
 - macOS app: `Contents/MacOS/screen-context` runs the command line (never the menu bar app; no arguments shows the help), and `mcp-config` from the app points clients at it (#35).
