@@ -375,3 +375,17 @@ def test_aw_context_refuses_a_zero_last_together_with_from_and_to():
     with pytest.raises(SystemExit): aw.main(["--last", "0m", "--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc"],
                                             opener=fake, caller=lambda *a: pytest.fail("looked up"))
     assert fake.requests == []
+
+
+@pytest.mark.parametrize("example", ["context", "range"])
+def test_mcp_tool_error_is_reported_without_exception_group(tmp_path, monkeypatch, example):
+    server = tmp_path / "error_server.py"
+    server.write_text('''from mcp.server.mcpserver import MCPServer\nfrom mcp.server.mcpserver.exceptions import ToolError\nserver = MCPServer("test")\n@server.tool()\ndef get_activity_between(start: float, end: float, limit: int = 20):\n    raise ToolError("request refused")\nserver.run()\n''')
+    monkeypatch.setenv("SCREEN_CONTEXT_CLIENT_TOKEN", "test-token")
+    command = f"{sys.executable} {server}"
+    with pytest.raises(SystemExit, match="request refused"):
+        if example == "context":
+            aw.main(["--from", iso(T0), "--to", iso(T0 + 60), "--host", "pc", "--server", command],
+                    opener=FakeAW([win(0, 60, "Code")], []))
+        else:
+            aw_range_module().main(["--start", str(T0), "--end", str(T0 + 60), "--server", command])
