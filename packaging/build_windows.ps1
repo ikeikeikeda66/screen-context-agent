@@ -10,7 +10,7 @@ try {
     & $PythonExe -c "import inspect; from windows_capture import WindowsCapture; assert 'window_hwnd' in inspect.signature(WindowsCapture).parameters, 'Exact HWND capture is required'"
     if ($LASTEXITCODE -ne 0) { throw 'A windows-capture version with window_hwnd support is required.' }
     $Common = @('--noconfirm', '--clean', '--onedir', '--distpath', 'dist/windows', '--workpath', 'build/windows', '--specpath', 'build/windows', '--collect-all', 'screen_context', '--collect-all', 'windows_capture', '--collect-all', 'winrt', '--collect-all', 'sqlcipher3', '--collect-all', 'uvicorn', '--collect-all', 'starlette', '--hidden-import', 'keyring.backends.Windows', '--hidden-import', '_cffi_backend')
-    & $PythonExe -m PyInstaller @Common --windowed --name ScreenContext packaging/windows_main.py
+    & $PythonExe -m PyInstaller @Common --windowed --icon packaging/assets/ScreenContext.ico --name ScreenContext packaging/windows_main.py
     if ($LASTEXITCODE -ne 0) { throw 'GUI build failed' }
     & $PythonExe -m PyInstaller @Common --console --name screen-context packaging/windows_cli.py
     if ($LASTEXITCODE -ne 0) { throw 'MCP CLI build failed' }
