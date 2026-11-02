@@ -238,6 +238,56 @@ def test_internal_snapshot_error_gives_no_reason(settings):
     assert "Invalid image path" not in str(error)
 
 
+@pytest.mark.parametrize("name,args", [
+    ("get_day_material", {"date": "2026-09-12", "timezone": "Asia/Tokyo", "cursor": "eA=="}),
+    ("get_activity_delta", {"cursor": "eA=="}),
+])
+def test_cursor_key_failure_is_an_internal_tool_error(settings, monkeypatch, name, args):
+    from mcp.server.mcpserver.exceptions import UnexpectedToolError
+    from screen_context.mcp_server import create_server
+
+    def fail_key(self):
+        raise OSError("private key failure")
+
+    monkeypatch.setattr(Service, "cursor_key", fail_key)
+    error = tool_error(create_server(settings, "full", authorize=lambda: "tester"), name, args)
+    assert type(error) is UnexpectedToolError
+    assert "CURSOR_EXPIRED" not in str(error)
+    assert "private key failure" not in str(error)
+
+
+@pytest.mark.parametrize("status,lang,expected", [
+    ("denied", "en", "request was denied"),
+    ("timeout", "en", "timed out"),
+    ("denied", "ja", "拒否"),
+    ("timeout", "ja", "時間切れ"),
+])
+def test_current_screen_expected_outcomes_are_reported_and_audited(settings, monkeypatch, caplog, status, lang, expected):
+    from mcp.server.mcpserver.exceptions import UnexpectedToolError
+    from screen_context import audit, broker
+    from screen_context.mcp_server import create_server
+
+    monkeypatch.setenv("SCREEN_CONTEXT_LANG", lang)
+    write = broker.atomic_write
+    def fake_write(path, data):
+        write(path, data)
+        if status == "denied" and path.suffix == ".request":
+            write(path.with_suffix(".reply"), b'{"status":"denied"}')
+    monkeypatch.setattr(broker, "atomic_write", fake_write)
+    request = broker.request_current
+    monkeypatch.setattr(broker, "request_current", lambda service: request(service, timeout=1 if status == "denied" else 0))
+
+    error = tool_error(create_server(settings, "full", authorize=lambda: "tester"), "get_current_screen", {})
+    assert not isinstance(error, UnexpectedToolError)
+    assert expected in str(error)
+    assert "excluded" not in str(error)
+    assert not any(record.exc_info for record in caplog.records)
+    rows = audit.rows(settings)
+    assert len(rows) == 1 and rows[0]["action"] == "get_current_screen"
+    assert rows[0]["params"]["status"] == status
+    assert not list((settings.root / "requests").iterdir())
+
+
 def test_valid_daily_rollup_date_succeeds(settings):
     from screen_context.mcp_server import create_server
     server = create_server(settings, "full", authorize=lambda: "tester")

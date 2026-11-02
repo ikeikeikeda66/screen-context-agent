@@ -80,8 +80,13 @@ def create_server(settings, profile="standard", client=None, authorize=None):
         @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False),
               description="Request a fresh foreground-window image. Requires approval in a local OS dialog for every call; capture daemon and indexer must be running.")
         def get_current_screen() -> list[TextContent | ImageContent]:
-            from .broker import request_current
-            data = request_current(service)
+            from .broker import CurrentScreenDenied, CurrentScreenTimeout, request_current
+            try:
+                data = request_current(service)
+            except CurrentScreenDenied:
+                raise ToolError(i18n.t("current.denied", i18n.resolve(settings))) from None
+            except CurrentScreenTimeout:
+                raise ToolError(i18n.t("current.timeout", i18n.resolve(settings))) from None
             return [TextContent(type="text", text=NOTICE), ImageContent(type="image", data=base64.b64encode(data).decode(), mimeType="image/webp")]
     return server
 

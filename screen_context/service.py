@@ -266,14 +266,15 @@ class Service:
         return base64.urlsafe_b64encode(raw + hmac.new(self.cursor_key(), raw, "sha256").digest()).decode()
 
     def decode_cursor(self, cursor):
+        key = self.cursor_key()
         try:
             data = base64.urlsafe_b64decode(cursor.encode())
             raw, tag = data[:-32], data[-32:]
-            if not hmac.compare_digest(tag, hmac.new(self.cursor_key(), raw, "sha256").digest()): raise ValueError
+            if not hmac.compare_digest(tag, hmac.new(key, raw, "sha256").digest()): raise ValueError
             payload = json.loads(raw)
-            if payload.get("profile") != self.profile: raise ValueError
+            if not isinstance(payload, dict) or payload.get("profile") != self.profile: raise ValueError
             return payload
-        except Exception: raise InvalidArgument("CURSOR_EXPIRED: cursor is invalid for this profile")
+        except ValueError: raise InvalidArgument("CURSOR_EXPIRED: cursor is invalid for this profile") from None
 
     def get_activity_delta(self, cursor: str | None = None, limit: int = 20, since_minutes: int = 60):
         """Frames in OCR-completion order after the cursor; late OCR is never skipped."""
