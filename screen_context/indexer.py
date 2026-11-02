@@ -40,6 +40,8 @@ def native_ocr(image):
 
 
 def drain(settings, recognize=native_ocr):
+    # Check before reading or deleting any queued frame, even when the queue is empty.
+    with store.connect(settings, readonly=True): pass
     key = None if settings.plaintext else get_key(settings)
     stats = {"indexed": 0, "excluded": 0, "failed": 0}
     for path in sorted((settings.root / "spool").glob("*.frame")):
@@ -85,6 +87,8 @@ def drain(settings, recognize=native_ocr):
                 for combination in combinations: store.count_skip(con, day, combination)
             path.unlink()
             stats["indexed"] += 1
+        except store.SchemaMismatch:
+            raise
         except Exception as error:
             # Retain for retry, do not log sensitive metadata or OCR contents.
             stats["failed"] += 1

@@ -6,6 +6,24 @@ from datetime import datetime
 from . import memory
 
 
+def index_cycle(settings, last_maintenance):
+    """Run one indexer iteration; retain queued frames and report schema mismatches."""
+    from . import store
+    from .crypto import atomic_write
+    from .indexer import drain, maintain
+    try:
+        result = drain(settings)
+        if time.monotonic() - last_maintenance > 3600:
+            maintain(settings)
+            last_maintenance = time.monotonic()
+    except store.SchemaMismatch as error:
+        result = {"status": "schema_mismatch",
+            "found": error.found, "expected": error.expected,
+        }
+        atomic_write(settings.root / "index-status.json", json.dumps({"ts": time.time(), **result}).encode())
+    return last_maintenance, result
+
+
 def worker(kind, settings, stop):
     from .locking import lock
     with lock(settings.root / ("capture.lock" if kind == "capture" else "indexer.lock")):
@@ -13,13 +31,9 @@ def worker(kind, settings, stop):
             from .capture import run
             run(settings, stop=stop)
         elif kind == "index":
-            from .indexer import drain, maintain
             last_maintenance = 0
             while not stop.is_set():
-                drain(settings)
-                if time.monotonic() - last_maintenance > 3600:
-                    maintain(settings)
-                    last_maintenance = time.monotonic()
+                last_maintenance, _ = index_cycle(settings, last_maintenance)
                 stop.wait(5)
         else:
             raise ValueError("Unknown worker")
@@ -162,9 +176,23 @@ class Workers:
         return states
 
 
+def schema_status(path, lang="en"):
+    from .i18n import schema_message
+    from .store import SchemaMismatch
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("status") != "schema_mismatch": return None
+        if type(data["found"]) is not int or type(data["expected"]) is not int: return None
+        return schema_message(SchemaMismatch(data["found"], data["expected"]), lang)
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def status_text(path, lang="en"):
     """Past result, explicitly not a claim that a worker is healthy now."""
     from .i18n import t
+    message = schema_status(path, lang)
+    if message is not None: return message
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         timestamp = datetime.fromtimestamp(float(data["ts"])).strftime("%m/%d %H:%M:%S")

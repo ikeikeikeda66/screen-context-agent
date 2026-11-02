@@ -222,9 +222,13 @@ def _main():
         last_maintenance = 0
         with lock(settings.root / "indexer.lock"):
             while True:
-                result = drain(settings)
-                if time.monotonic()-last_maintenance > 3600:
-                    maintain(settings); last_maintenance = time.monotonic()
+                if args.watch:
+                    from .desktop import index_cycle
+                    last_maintenance, result = index_cycle(settings, last_maintenance)
+                else:
+                    result = drain(settings)
+                    if time.monotonic()-last_maintenance > 3600:
+                        maintain(settings); last_maintenance = time.monotonic()
                 if not args.watch or stop.wait(5): break
     elif args.command == "maintain":
         from .indexer import maintain

@@ -143,3 +143,27 @@ def test_secure_input_status_says_skipped_not_processed(tmp_path):
     assert "Skipped (secure input)" in en and "Processed" not in en
     ja = status_text(path, "ja")
     assert "撮影を控えた（セキュア入力中）" in ja and "処理済み" not in ja
+
+
+def test_indexer_waits_for_schema_and_resumes_without_losing_spool(tmp_path, monkeypatch):
+    import sqlite3
+    from screen_context import desktop, indexer, store
+    settings = Settings(tmp_path, plaintext=True)
+    store.initialize(settings)
+    frame = settings.root / "spool" / "pending.frame"
+    frame.write_bytes(b"pending")
+    with sqlite3.connect(settings.db) as db:
+        db.execute("PRAGMA user_version=3")
+    calls = []
+    monkeypatch.setattr(indexer, "native_ocr", lambda image: pytest.fail("must not run OCR"))
+    previous, result = desktop.index_cycle(settings, 0)
+    assert previous == 0 and frame.read_bytes() == b"pending"
+    assert result["status"] == "schema_mismatch"
+    assert "back" in status_text(settings.root / "index-status.json", "en").lower()
+    assert "バックアップ" in status_text(settings.root / "index-status.json", "ja")
+    with sqlite3.connect(settings.db) as db:
+        db.execute(f"PRAGMA user_version={store.SCHEMA_VERSION}")
+    monkeypatch.setattr(indexer, "drain", lambda s: calls.append("drain"))
+    monkeypatch.setattr(indexer, "maintain", lambda s: calls.append("maintain"))
+    assert desktop.index_cycle(settings, 0)[0] > 0
+    assert calls == ["drain", "maintain"]
