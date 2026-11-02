@@ -12,7 +12,6 @@ Uses only the standard library plus the `mcp` package that ScreenContext already
 with ScreenContext's Python: `.venv/bin/python examples/activitywatch/aw_range.py --start 2026-10-04T14:00 --end 2026-10-04T15:30`.
 """
 import argparse
-import asyncio
 import importlib.util
 import json
 import os
@@ -72,7 +71,7 @@ def main(argv=None, caller=None):
         async with aw.mcp_caller(shlex.split(args.server), dict(os.environ))() as call:
             return await aw.lookup([segment], call, args.limit)
 
-    found = asyncio.run(run())
+    found = aw.run_lookup(run())
     print(json.dumps(found, ensure_ascii=False, indent=2) if args.format == "json" else aw.markdown(found))
     return found
 
