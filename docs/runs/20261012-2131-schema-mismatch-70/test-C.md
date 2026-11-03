@@ -1,0 +1,1 @@
+検証 pass: 547 passed、製品コード stash で 34 failed、手動 E2E（v3 clients list rc1 日本語1行 / v9 init 拒否 user_version 9 維持 / health needs_newer_binary）、restore 拒否 lifecycle.py:99 < unlink 112、initialize チェック store.py:153 < prepare 154
